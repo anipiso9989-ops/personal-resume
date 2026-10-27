@@ -51,7 +51,7 @@
     .header-actions a { font-size: 13px; text-decoration: none; padding: 8px 13px; border-radius: 30px; background: rgba(248, 251, 246, .94); border: 1px solid rgba(255,255,255,.85); }
     .motion-button { display: inline-flex; align-items: center; gap: 8px; background: rgba(248, 251, 246, .94); border: 1px solid rgba(255,255,255,.8); border-radius: 30px; padding: 8px 13px; font-size: 12px; }
     .motion-icon { font-size: 12px; width: 12px; }
-    .resume { width: min(1060px, calc(100% - 60px)); margin: 60px auto 30px; background: var(--paper); border: 1px solid rgba(255,255,255,.9); border-radius: 5px; box-shadow: 0 25px 85px rgba(5, 70, 76, .14); }
+    .resume { width: min(1060px, calc(100% - 60px)); margin: 60px auto 30px; background: var(--paper); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); border: 1px solid rgba(255,255,255,.9); border-radius: 5px; box-shadow: 0 25px 85px rgba(5, 70, 76, .14); }
     .hero { padding: 66px 66px 48px; }
     .eyebrow, .section-label, .meta-label { font: 11px/1.5 var(--mono); letter-spacing: .12em; text-transform: uppercase; }
     .eyebrow { margin: 0 0 27px; display: flex; align-items: center; gap: 10px; color: var(--accent); }
@@ -136,7 +136,7 @@
     @media print {
       @page { size: auto; margin: 15mm; }
       html, body { background: white; font-size: 10pt; color: #111; }
-      #lagoon, #water-ripples, .site-header, .section-nav, .hero-cta, .site-footer, .skip, .print-button, .no-js { display: none !important; }
+      #lagoon, .site-header, .section-nav, .hero-cta, .site-footer, .skip, .print-button, .no-js { display: none !important; }
       .resume { width: 100%; margin: 0; border: 0; box-shadow: none; background: white; }
       .hero { padding: 0 0 20px; }
       .hero-grid { grid-template-columns: 1.3fr 1fr; gap: 30px; }
@@ -157,7 +157,6 @@
   </style>
 </head>
 <body id="top">
-  <canvas id="water-ripples" aria-hidden="true" style="position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:2"></canvas>
   <a class="skip" href="#resume">Skip to résumé</a>
   <div id="lagoon" aria-hidden="true"><canvas id="sea" width="1944" height="1760"></canvas></div>
 
@@ -313,10 +312,40 @@
   <!-- LAGOON ANIMATION — independent of your resume. No external libraries. -->
   <script id="lagoon-animation">
 
-const cv=document.getElementById('sea'),ctx=cv.getContext('2d');
-const rippleCanvas=document.getElementById('water-ripples'),rippleCtx=rippleCanvas.getContext('2d');
-const TAU=Math.PI*2,T=80;
-const ell=(g,x,y,rx,ry,rot,fill)=>{g.beginPath();g.ellipse(x,y,rx,ry,rot||0,0,TAU);g.fillStyle=fill;g.fill();};
+      // Top-down Hawaiian lagoon in ASCII cells. Everything is a pure function of t and
+      // every motion has an integer number of cycles per T, so the video loops seamlessly.
+      const W = 1944, H = 1760, T = 24.5, TAU = Math.PI * 2, w = TAU / T;
+      const CW = 16, CH = 22, COLS = Math.ceil(W / CW), ROWS = Math.ceil(H / CH), SS = 4;
+      const cv = document.getElementById("sea"), ctx = cv.getContext("2d");
+
+      const mk = (cw, ch) => { const c = document.createElement("canvas"); c.width = cw; c.height = ch; return [c, c.getContext("2d", { willReadFrequently: true })]; };
+      const [oc, ox] = mk(COLS * SS, ROWS * SS);   // supersampled layer, averaged into cells
+      const [bgc, bgx] = mk(W, H);                 // static water + grid
+
+      const hash = (a, b, c) => { let h = Math.sin(a * 127.1 + b * 311.7 + c * 74.7) * 43758.5453; return h - Math.floor(h); };
+      const mix = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
+      const rgb = (c, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
+      const lum = (c) => (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]) / 255;
+
+      // Lagoon: sunlit shallows top-left, deeper blue bottom-right.
+      const STOPS = [[0, [178, 244, 232]], [0.42, [74, 214, 214]], [0.78, [26, 168, 202]], [1, [14, 128, 182]]];
+      const water = (x, y) => {
+        const k = Math.min(1, Math.max(0, (x * 0.45 + y * 0.9) / (W * 0.45 + H * 0.9)));
+        for (let i = 1; i < STOPS.length; i++) if (k <= STOPS[i][0]) return mix(STOPS[i - 1][1], STOPS[i][1], (k - STOPS[i - 1][0]) / (STOPS[i][0] - STOPS[i - 1][0]));
+        return STOPS[3][1];
+      };
+      {
+        const g = bgx.createLinearGradient(0, 0, W * 0.45, H * 0.9);
+        STOPS.forEach(([k, c]) => g.addColorStop(k, rgb(c)));
+        bgx.fillStyle = g; bgx.fillRect(0, 0, W, H);
+        bgx.fillStyle = "rgba(255,255,255,0.07)";
+        for (let x = 0; x < W; x += CW) bgx.fillRect(x, 0, 1, H);
+        for (let y = 0; y < H; y += CH) bgx.fillRect(0, y, W, 1);
+      }
+
+      // ---------- creatures, drawn in local px facing +x ----------
+      const ell = (g, x, y, rx, ry, rot, fill) => { g.beginPath(); g.ellipse(x, y, rx, ry, rot || 0, 0, TAU); g.fillStyle = fill; g.fill(); };
+
       function turtle(g, t, s, ph) {
         const f = Math.sin(TAU * 14 * t / T + ph);
         for (const m of [-1, 1]) {
@@ -399,76 +428,162 @@ const ell=(g,x,y,rx,ry,rot,fill)=>{g.beginPath();g.ellipse(x,y,rx,ry,rot||0,0,TA
         ell(g, 0, 0, 34 * s, 34 * s, 0, c);
       }
 
+      // ---------- paths: closed curves with integer harmonics of T ----------
+      const P = {
+        turtleA: (t) => [972 + 1080 * Math.cos(w * t + 0.3), 860 + 640 * Math.sin(w * t + 0.3) + 140 * Math.sin(2 * w * t)],
+        turtleB: (t) => [900 + 700 * Math.sin(-w * t + 1), 880 - 1080 * Math.cos(-w * t + 1)],
+        turtleC: (t) => [972 + 1150 * Math.sin(w * t + 4), 900 + 560 * Math.sin(2 * w * t + 4.6)],
+        manta: (t) => [972 + 1380 * Math.cos(-w * t + 3.6), 820 + 900 * Math.sin(-w * t + 3.6)],
+        dolphin: (t) => [972 + 1350 * Math.cos(2 * w * t + 0.8), 900 + 950 * Math.sin(2 * w * t + 0.8) + 160 * Math.sin(4 * w * t)],
+        school: (t) => [972 + 1150 * Math.sin(2 * w * t + 5), 880 + 800 * Math.sin(3 * w * t + 1)],
+        whale: (t) => [972 + 1900 * Math.cos(w * t + 2.4), 1350 + 380 * Math.sin(w * t + 2.4)],
+      };
+      const pose = (fn, t) => { const [x, y] = fn(t), [x2, y2] = fn(t + 0.02); return [x, y, Math.atan2(y2 - y, x2 - x)]; };
+      const FISH = [[0, 0], [-120, -70], [-120, 75], [-240, -10], [-230, -140], [-235, 130], [-360, -75], [-355, 70], [-470, 5], [-480, -150], [-470, 150]];
+      const FLOWERS = [["h", 0.0, 260, 1.0, 1], ["p", 0.22, 1240, 0.9, -1], ["h", 0.47, 640, 0.8, -1], ["p", 0.63, 1560, 1.1, 1], ["p", 0.86, 120, 0.8, 1]];
 
-// Detailed new inhabitants: reef sharks, striped angelfish and jellyfish.
-function shark(g,t){
- const f=Math.sin(t*3)*.22;
- g.save();g.translate(-160,0);g.rotate(f);
- g.beginPath();g.moveTo(0,0);g.lineTo(-150,-95);g.lineTo(-110,0);g.lineTo(-140,55);g.closePath();g.fillStyle='#537682';g.fill();g.restore();
- for(const m of [-1,1]){g.beginPath();g.moveTo(30,20*m);g.lineTo(-100,135*m);g.lineTo(-40,24*m);g.fillStyle='#527b86';g.fill();}
- const grad=g.createLinearGradient(0,-50,0,50);grad.addColorStop(0,'#405e6a');grad.addColorStop(.5,'#8daab0');grad.addColorStop(1,'#d4e4df');
- ell(g,0,0,210,48,0,grad);ell(g,175,-21,5,5,0,'#142d35');ell(g,175,21,5,5,0,'#142d35');
- for(let i=0;i<5;i++){g.strokeStyle='#3a5965';g.lineWidth=3;g.beginPath();g.moveTo(80-i*10,-34);g.lineTo(75-i*10,-20);g.stroke();}
-}
-function angel(g,t){
- g.save();g.translate(-60,0);g.rotate(Math.sin(t*5)*.2);g.beginPath();g.moveTo(0,0);g.lineTo(-65,-50);g.lineTo(-65,50);g.fillStyle='#e3b83f';g.fill();g.restore();
- ell(g,0,0,90,55,0,'#438fba');
- for(let i=-2;i<=2;i++)ell(g,i*27,0,7,Math.sqrt(1-(i*27/95)**2)*50,.1,'#e8d168');
- ell(g,65,-15,7,7,0,'#152d41');
-}
-function jelly(g,t){
- for(let j=0;j<9;j++){g.beginPath();g.moveTo(-30,j*12-48);for(let k=0;k<30;k++)g.lineTo(-30-k*7,j*12-48+Math.sin(k*.25+t*2+j)*k*.8);g.strokeStyle=j%2?'#ccb7da':'#a8cddd';g.lineWidth=3;g.stroke();}
- const grad=g.createRadialGradient(30,0,4,20,0,85);grad.addColorStop(0,'#e7d7ed');grad.addColorStop(1,'#818fc2');ell(g,20,0,80,80,0,grad);
- for(let i=0;i<4;i++)ell(g,20+Math.cos(i*TAU/4)*25,Math.sin(i*TAU/4)*25,16,12,i*TAU/4,'#ba9dc9');
-}
-const species={turtle:(g,t)=>turtle(g,t,1,0),manta,dolphin:(g,t)=>dolphin(g,t,0),tang:(g,t)=>tang(g,t,0),whale,shark,angel,jelly};
-// Fine 2-pixel ASCII cells retain contours, shell patterns, fins, stripes and eyes.
-const sprites=new Map();
-function sprite(kind,frame){
- const key=kind+frame;if(sprites.has(key))return sprites.get(key);
- const raw=document.createElement('canvas');raw.width=260;raw.height=160;
- const g=raw.getContext('2d',{willReadFrequently:true});g.translate(150,80);g.scale(.18,.18);const period={turtle:T/14,manta:T/10,dolphin:T/60,tang:T/110,whale:T/8,shark:TAU/3,angel:TAU/5,jelly:TAU/2}[kind];species[kind](g,frame/24*period);
- const pixels=g.getImageData(0,0,260,160).data,out=document.createElement('canvas');out.width=260;out.height=160;
- const q=out.getContext('2d');q.font='3px "IBM Plex Mono", monospace';q.textAlign='center';q.textBaseline='middle';
- for(let y=0;y<160;y+=2)for(let x=0;x<260;x+=2){const i=(y*260+x)*4,a=pixels[i+3]/255;if(a<.15)continue;const r=pixels[i],b=pixels[i+2],v=pixels[i+1];q.fillStyle=`rgba(${r},${v},${b},${a*.85})`;q.fillRect(x,y,2,2);q.fillStyle=`rgba(${Math.min(255,r+65)},${Math.min(255,v+65)},${Math.min(255,b+65)},${a*.7})`;q.fillText('.:;+=x#@'[Math.min(7,Math.floor((r+v+b)/96))],x+1,y+1);}
- sprites.set(key,out);return out;
-}
-let width=0,height=0,dpr=1;
-function resize(){width=innerWidth;height=innerHeight;dpr=Math.min(devicePixelRatio||1,2);cv.width=Math.round(width*dpr);cv.height=Math.round(height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);rippleCanvas.width=cv.width;rippleCanvas.height=cv.height;rippleCtx.setTransform(dpr,0,0,dpr,0,0);}
-addEventListener('resize',()=>{resize();render(time);});resize();
-const rand=n=>{const v=Math.sin(n*127.1+42)*43758.5453;return v-Math.floor(v);};
-const animals=Array.from({length:52},(_,i)=>({kind:i===0?'whale':['turtle','manta','dolphin','tang','tang','angel','shark','jelly'][i%8],x:rand(i+1),y:rand(i+100),speed:.002+rand(i+200)*.004,phase:rand(i+300)*TAU,size:.7+rand(i+400)*.6}));
-const plants=Array.from({length:24},(_,i)=>({x:rand(i+500),y:.12+rand(i+600)*.88,size:.6+rand(i+700)*.8}));
-const ripples=[];const reduced=matchMedia('(prefers-reduced-motion: reduce)');
-let time=0,last=0,lastRender=0,frameId=null,printing=false;
-function render(t){
- const scale=Math.min(width/1400,height/850); // Wide camera: complete ecosystem at every aspect ratio.
- const water=ctx.createLinearGradient(0,0,width,height);water.addColorStop(0,'#a7e6da');water.addColorStop(.48,'#59c9ca');water.addColorStop(1,'#2596b1');ctx.fillStyle=water;ctx.fillRect(0,0,width,height);
- ctx.font='9px "IBM Plex Mono", monospace';ctx.textAlign='center';ctx.textBaseline='middle';
- // Quiet, slowly shifting interference patterns simulate refracted sunlight.
- for(let y=0;y<height;y+=16)for(let x=0;x<width;x+=13){const v=Math.sin(x*.024+Math.sin(y*.017+t*.2)*2+t*.18)+Math.sin(y*.029+Math.sin(x*.014-t*.16)*2);if(v>1.65){ctx.fillStyle=`rgba(238,255,238,${(v-1.65)*.22})`;ctx.fillText(v>1.9?'~':'.',x,y);}}
- // Reef clusters, starfish and scattered sand texture.
- for(let i=0;i<44;i++){const x=rand(i+800)*width,y=rand(i+900)*height;for(let j=0;j<32;j++){const a=j*2.4,r=Math.sqrt(j)*4*scale;ctx.fillStyle=['#afaa78','#d69991','#81a9a0','#b4a1c2'][i%4];ctx.globalAlpha=.26;ctx.fillText(j%5?'∴':'*',x+Math.cos(a)*r,y+Math.sin(a)*r);}}ctx.globalAlpha=1;
- // Rooted fronds sway with a shared current; tips travel farther than bases.
- ctx.font=`${Math.max(4,7*scale)}px "IBM Plex Mono", monospace`;
- for(const p of plants)for(let f=0;f<9;f++)for(let k=0;k<18;k++){const bend=Math.sin(t*.65+k*.16+f*.5+p.x*12)*k*.7;const x=p.x*width+((f-4)*5+bend)*scale*p.size,y=p.y*height-k*4*scale*p.size;ctx.fillStyle=f%2?'rgba(35,116,87,.48)':'rgba(55,145,98,.5)';ctx.fillText(k%3?'|':'/',x,y);}
- for(const a of animals){const x=((a.x+t*a.speed)%1)*(width+180)-90,y=(a.y+Math.sin(t*.13+a.phase)*.065)*height;const angle=Math.cos(t*.13+a.phase)*.12;const size=scale*a.size;ctx.save();ctx.translate(x,y);ctx.rotate(angle);ctx.globalAlpha=a.kind==='jelly'?.65:.88;ctx.drawImage(sprite(a.kind,Math.floor(t*8)%24),-150*size,-80*size,260*size,160*size);ctx.restore();}
- // Click coordinates are viewport coordinates, matching this fixed canvas exactly.
- rippleCtx.clearRect(0,0,width,height);rippleCtx.textAlign="center";rippleCtx.textBaseline="middle";
- const now=performance.now();rippleCtx.font='11px "IBM Plex Mono", monospace';
- for(let i=ripples.length-1;i>=0;i--){const r=ripples[i],age=(now-r.start)/1000;if(age>2.5){ripples.splice(i,1);continue;}for(let ring=0;ring<3;ring++){const radius=reduced.matches?22+ring*12:age*95-ring*21;if(radius<3)continue;const count=Math.max(12,Math.ceil(radius*TAU/10));rippleCtx.fillStyle=`rgba(245,255,250,${(1-age/2.5)*(.85-ring*.16)})`;for(let j=0;j<count;j++){const a=j/count*TAU;rippleCtx.fillText(j%3?'·':'~',r.x+Math.cos(a)*radius,r.y+Math.sin(a)*radius*.68);}}}
-}
-function loop(now){frameId=null;if(document.hidden||printing)return;if(!reduced.matches&&last)time+=(now-last)/1000;last=now;if(now-lastRender>=1000/24){render(time);lastRender=now;}if(!reduced.matches||ripples.length)frameId=requestAnimationFrame(loop);}
-function start(){if(frameId!==null)cancelAnimationFrame(frameId);frameId=null;last=0;if(!document.hidden&&!printing)frameId=requestAnimationFrame(loop);}
-// A tap triggers feedback without preventing links, scrolling, selection or printing.
-let pointerStart=null;
-document.addEventListener('pointerdown',e=>{if(e.isPrimary)pointerStart={x:e.clientX,y:e.clientY};},{passive:true});
-document.addEventListener('pointerup',e=>{if(!pointerStart||!e.isPrimary)return;const p=pointerStart;pointerStart=null;if(Math.hypot(e.clientX-p.x,e.clientY-p.y)>12)return;rippleCanvas.dataset.taps=String(Number(rippleCanvas.dataset.taps||0)+1);ripples.push({x:e.clientX,y:e.clientY,start:performance.now()});if(ripples.length>10)ripples.shift();start();},{passive:true});
-document.addEventListener('pointercancel',()=>{pointerStart=null;},{passive:true});
-document.addEventListener('visibilitychange',start);reduced.addEventListener('change',start);
-addEventListener('beforeprint',()=>{printing=true;start();});addEventListener('afterprint',()=>{printing=false;start();});
-document.fonts.ready.then(()=>{sprites.clear();start();});render(0);start();
+      // ---------- per-cell sampling ----------
+      function sample(draw) {
+        ox.setTransform(1, 0, 0, 1, 0, 0); ox.clearRect(0, 0, oc.width, oc.height);
+        ox.setTransform((COLS * SS) / (COLS * CW), 0, 0, (ROWS * SS) / (ROWS * CH), 0, 0);
+        draw(ox);
+        const d = ox.getImageData(0, 0, oc.width, oc.height).data, out = new Float32Array(COLS * ROWS * 4), rw = oc.width * 4;
+        for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) {
+          let r = 0, gg = 0, b = 0, a = 0;
+          for (let v = 0; v < SS; v++) for (let u = 0, p = (j * SS + v) * rw + i * SS * 4; u < SS; u++, p += 4) { const al = d[p + 3]; r += d[p] * al; gg += d[p + 1] * al; b += d[p + 2] * al; a += al; }
+          const o = (j * COLS + i) * 4;
+          if (a > 0) { out[o] = r / a; out[o + 1] = gg / a; out[o + 2] = b / a; out[o + 3] = a / (255 * SS * SS); }
+        }
+        return out;
+      }
+      const put = (g, fn, t, x, y, a, s, draw) => { g.save(); g.translate(x, y); g.rotate(a); if (s !== 1) g.scale(s, s); draw(g); g.restore(); };
 
-</script>
+      // Reef floor is static: sample it once.
+      const reef = sample((g) => {
+        const blob = (x, y, r, c1, c2, n) => { for (let k = 0; k < n; k++) { const a = hash(x, y, k) * TAU, d = hash(y, x, k) * r * 0.7; ell(g, x + Math.cos(a) * d, y + Math.sin(a) * d * 0.9, r * (0.35 + 0.3 * hash(k, x, y)), r * (0.3 + 0.3 * hash(k, y, x)), a, k % 2 ? c1 : c2); } };
+        blob(140, 1600, 110, "#d98a6a", "#c46a5a", 10); blob(1800, 220, 100, "#d8b86a", "#c49c4c", 9);
+        blob(80, 380, 80, "#c9a0d8", "#e2a0b8", 7); blob(1700, 1650, 110, "#d6b870", "#e8907a", 10);
+        for (const [x, y, r, c] of [[300, 1460, 46, "#ff6a3d"], [1520, 1560, 40, "#ff8a2a"], [1900, 420, 36, "#e8483c"], [220, 300, 34, "#ff7a3a"]]) {
+          g.save(); g.translate(x, y); g.rotate(hash(x, y, 1) * TAU);
+          for (let k = 0; k < 5; k++) { g.save(); g.rotate(k * TAU / 5); ell(g, r * 0.6, 0, r * 0.65, r * 0.2, 0, c); g.restore(); }
+          ell(g, 0, 0, r * 0.3, r * 0.3, 0, c); g.restore();
+        }
+        for (const [x, y] of [[560, 1580], [1740, 1480], [1960, 980], [40, 900]]) { g.save(); g.translate(x, y); for (let k = 0; k < 12; k++) { g.rotate(TAU / 12); ell(g, 22, 0, 22, 3, 0, "#3a1f4a"); } ell(g, 0, 0, 14, 14, 0, "#2a1438"); g.restore(); }
+      });
+
+      const RAMP = "8%XSSt%t;:";
+      const EDGE = "',.o:;";
+      const SPRINK = ["#ff5fa2", "#16c79a", "#8b6cff", "#ffb000"];
+      function cells(L, depth, t, glyphs) {
+        for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) {
+          const o = (j * COLS + i) * 4, a = L[o + 3];
+          if (a < 0.12) continue;
+          const x = i * CW, y = j * CH;
+          let c = [L[o], L[o + 1], L[o + 2]];
+          if (depth) c = mix(c, water(x, y), depth);
+          const flick = hash(i, j, Math.floor(t * 7));
+          if (a > 0.5) {
+            ctx.fillStyle = rgb(c, depth ? 0.9 : 1); ctx.fillRect(x + 1, y + 1, CW - 2, CH - 2);
+            if (!glyphs) continue;
+            const l = lum(c), ch = RAMP[Math.max(0, Math.min(RAMP.length - 1, Math.floor(1 + l * 5 + flick * 4)))];
+            ctx.fillStyle = flick < 0.04 ? SPRINK[(flick * 100) | 0] : rgb(l < 0.42 ? mix(c, [255, 255, 255], 0.62) : mix(c, [0, 0, 0], 0.58), depth ? 0.6 : 1);
+            ctx.fillText(ch, x + CW / 2, y + CH / 2 + 1);
+          } else {
+            ctx.fillStyle = rgb(c, Math.min(1, a * 1.6) * (depth ? 0.6 : 1));
+            ctx.fillText(EDGE[(flick * EDGE.length) | 0], x + CW / 2, y + CH / 2 + 1);
+          }
+        }
+      }
+
+      function draw(t) {
+        t = ((t % T) + T) % T;
+        ctx.drawImage(bgc, 0, 0);
+
+        // sun bands drifting over the lagoon
+        ctx.save(); ctx.globalCompositeOperation = "screen";
+        for (let k = 0; k < 4; k++) {
+          const off = ((t / T + k / 4) % 1) * (W + H) * 1.2 - H * 0.6, g = ctx.createLinearGradient(off, 0, off + 260, 160);
+          g.addColorStop(0, "rgba(255,255,255,0)"); g.addColorStop(0.5, "rgba(255,255,240,0.10)"); g.addColorStop(1, "rgba(255,255,255,0)");
+          ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+        }
+        ctx.restore();
+
+        ctx.font = '500 15px "IBM Plex Mono", monospace'; ctx.textAlign = "center"; ctx.textBaseline = "middle";
+
+        // caustic net + surface glints
+        for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) {
+          const x = i * CW, y = j * CH;
+          const v = Math.sin(x * 0.011 + y * 0.004 + w * 2 * t + 1.6 * Math.sin(y * 0.007 - w * 3 * t))
+                  + Math.sin(-x * 0.006 + y * 0.012 - w * 3 * t + 1.6 * Math.sin(x * 0.008 + w * 2 * t))
+                  + Math.sin(x * 0.009 - y * 0.009 + w * 4 * t + 1.2 * Math.sin((x + y) * 0.005 + w * t));
+          if (v > 1.55) { const k = Math.min(1, (v - 1.55) / 1.2); ctx.fillStyle = `rgba(255,255,255,${0.16 + 0.42 * k})`; ctx.fillText(k > 0.6 ? "~" : k > 0.3 ? "-" : "·", x + CW / 2, y + CH / 2); }
+          const gl = hash(i, j, Math.floor(t * 6) % 147);
+          if (gl > 0.9988) { const f = Math.sin(((t * 6) % 1) * Math.PI); ctx.fillStyle = `rgba(255,255,255,${0.95 * f})`; ctx.fillText(gl > 0.9995 ? "*" : "+", x + CW / 2, y + CH / 2); }
+        }
+
+        cells(reef, 0.62, t, true);
+
+        const deep = sample((g) => { const [x, y, a] = pose(P.whale, t); put(g, null, t, x, y, a, 1, (g) => whale(g, t)); });
+        cells(deep, 0.4, t, true);
+
+        const main = sample((g) => {
+          let [x, y, a] = pose(P.manta, t); put(g, null, t, x, y, a, 1.2, (g) => manta(g, t));
+          for (const [dx, ph] of [[0, 0], [1, 1.3]]) { [x, y, a] = pose(P.dolphin, t - dx * 0.18); put(g, null, t, x + dx * 120 * Math.sin(a), y - dx * 120 * Math.cos(a), a, 1.25, (g) => dolphin(g, t, ph)); }
+          [x, y, a] = pose(P.turtleA, t); put(g, null, t, x, y, a, 1.55, (g) => turtle(g, t, 1, 0));
+          [x, y, a] = pose(P.turtleB, t); put(g, null, t, x, y, a, 1.3, (g) => turtle(g, t, 1, 2));
+          [x, y, a] = pose(P.turtleC, t); put(g, null, t, x, y, a, 1.1, (g) => turtle(g, t, 1, 4));
+          [x, y, a] = pose(P.school, t);
+          FISH.forEach(([fx, fy], k) => { const ca = Math.cos(a), sa = Math.sin(a), wob = 14 * Math.sin(w * 7 * t + k); put(g, null, t, x + fx * ca - (fy + wob) * sa, y + fx * sa + (fy + wob) * ca, a + 0.15 * Math.sin(w * 9 * t + k), 1.35, (g) => tang(g, t, k)); });
+          for (const [kind, p0, y0, s, dir] of FLOWERS) {
+            const u = (p0 + t / T) % 1, fx = -220 + u * (W + 440), fy = y0 + u * 420 + 30 * Math.sin(w * 3 * t + p0 * 9);
+            put(g, null, t, fx, fy, dir * w * t + p0 * 6, 1, (g) => (kind === "h" ? hibiscus : plumeria)(g, s));
+          }
+        });
+
+        // shadows on the sand, offset down-right from the sun
+        ctx.fillStyle = "rgba(4,60,84,0.16)";
+        for (let j = 0; j < ROWS - 2; j++) for (let i = 0; i < COLS - 2; i++) { const a = main[(j * COLS + i) * 4 + 3]; if (a > 0.3) ctx.fillRect((i + 2) * CW, (j + 2) * CH, CW, CH); }
+
+        // foam wakes behind the swimmers
+        for (const [fn, len] of [[P.turtleA, 1.5], [P.turtleB, 1.3], [P.turtleC, 1.1], [P.manta, 1.6], [P.dolphin, 1.4]]) {
+          for (let k = 1; k <= 16; k++) {
+            const [x, y, a] = pose(fn, t - k * 0.09 - 0.35 * len), side = (hash(k, len, 3) - 0.5) * k * 9;
+            const px = x + side * -Math.sin(a), py = y + side * Math.cos(a);
+            ctx.fillStyle = `rgba(255,255,255,${0.55 * (1 - k / 17)})`;
+            ctx.fillText(".·o°"[(hash(k, len, Math.floor(t * 5)) * 4) | 0], Math.floor(px / CW) * CW + CW / 2, Math.floor(py / CH) * CH + CH / 2);
+          }
+        }
+
+        cells(main, 0, t, true);
+
+      }
+
+      // Cap drawing at 30 fps. Pause while hidden or printing, and respect the
+      // visitor's reduced-motion preference. Pausing never jumps the scene.
+      const motion = window.matchMedia('(prefers-reduced-motion: reduce)');
+      let paused = motion.matches, printing = false;
+      let phase = 0, lastTick = 0, lastDraw = 0, frameId = null;
+
+      function loop(now) {
+        frameId = null;
+        if (paused || printing || document.hidden) return;
+        if (lastTick) phase += Math.min(now - lastTick, 250) / 1000;
+        lastTick = now;
+        if (now - lastDraw >= 1000 / 30) { draw(phase); lastDraw = now; }
+        frameId = requestAnimationFrame(loop);
+      }
+      function syncPlayback() {
+        if (frameId !== null) cancelAnimationFrame(frameId);
+        frameId = null; lastTick = 0;
+        if (!paused && !printing && !document.hidden) frameId = requestAnimationFrame(loop);
+      }
+      motion.addEventListener('change', (event) => { paused = event.matches; syncPlayback(); });
+      document.addEventListener('visibilitychange', syncPlayback);
+      window.addEventListener('beforeprint', () => { printing = true; syncPlayback(); });
+      window.addEventListener('afterprint', () => { printing = false; syncPlayback(); });
+      draw(phase);
+      syncPlayback();
+
+  </script>
 </body>
 </html>
