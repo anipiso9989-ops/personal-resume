@@ -516,6 +516,40 @@
       // Small resident groups circulate near the new coral shelves.
       P.clownfish = t => [.14*W + 235*Math.cos(w*t+.5), .32*H + 145*Math.sin(w*t+.5) + 25*Math.sin(2*w*t)];
       P.discus = t => [.79*W + 390*Math.cos(-w*t+2), .66*H + 365*Math.sin(-w*t+2) + 45*Math.sin(2*w*t)];
+      // Creature-only clock. Water, plants, flowers and interaction effects
+      // continue on the original clock. Bigger routes retain their former travel
+      // speed through arc-length parameterization, then run 12% slower.
+      const CREATURE_SPEED = .88;
+      const orbitSeed = crypto.getRandomValues(new Uint32Array(1))[0];
+      const creatureBounds = {turtleA:350,turtleB:300,turtleC:300,manta:500,dolphin:400,school:750,whale:900,clownfish:180,discus:180};
+      function roamingOrbit(reference, name, index) {
+        const N=2048, margin=creatureBounds[name];
+        let referenceLength=0, previous=reference(0);
+        for(let i=1;i<=512;i++) {const q=reference(i*T/512);referenceLength+=Math.hypot(q[0]-previous[0],q[1]-previous[1]);previous=q;}
+        const speed=referenceLength/T;
+        const random=k=>hash(index+1,k,orbitSeed%1000003);
+        const rx=W*(.66+random(1)*.12)+margin;
+        const ry=H*(.60+random(2)*.12)+margin;
+        const phase=(random(3)-.5)*.5, direction=random(4)>.5?1:-1;
+        const curve=u=>{
+          const x=W/2+rx*Math.sin(u)+W*.045*Math.sin(3*u+phase)+W*.018*Math.sin(5*u);
+          const y=H/2+ry*(.75*Math.sin(2*u+phase)+.17*Math.sin(3*u)) + H*.035*Math.sin(u+phase);
+          return [x,y];
+        };
+        const points=[], lengths=[0];let total=0;
+        for(let i=0;i<=N;i++) {const q=curve(i/N*TAU);if(i)total+=Math.hypot(q[0]-points[i-1][0],q[1]-points[i-1][1]);points.push(q);if(i)lengths.push(total);}
+        const offset=random(5)*total;
+        const route=t=>{
+          const distance=((direction*t*speed+offset)%total+total)%total;
+          let lo=0,hi=N;
+          while(hi-lo>1){const mid=(lo+hi)>>1;if(lengths[mid]<=distance)lo=mid;else hi=mid;}
+          const f=(distance-lengths[lo])/(lengths[hi]-lengths[lo]||1);
+          return [points[lo][0]+(points[hi][0]-points[lo][0])*f,points[lo][1]+(points[hi][1]-points[lo][1])*f];
+        };
+        route.duration=total/speed;route.referenceSpeed=speed;
+        return route;
+      }
+      Object.keys(P).forEach((name,i)=>{P[name]=roamingOrbit(P[name],name,i);});
       const pose = (fn, t) => { const [x, y] = fn(t), [x2, y2] = fn(t + 0.02); return [x, y, Math.atan2(y2 - y, x2 - x)]; };
       const FISH = [[0, 0], [-120, -70], [-120, 75], [-240, -10], [-230, -140], [-235, 130], [-360, -75], [-355, 70], [-470, 5], [-480, -150], [-470, 150]];
       const FLOWERS = [["h", 0.0, 260, 1.0, 1], ["p", 0.22, 1240, 0.9, -1], ["h", 0.47, 640, 0.8, -1], ["p", 0.63, 1560, 1.1, 1], ["p", 0.86, 120, 0.8, 1]];
@@ -692,7 +726,7 @@
       }
 
       function draw(t) {
-        t = ((t % T) + T) % T;
+        const creatureTime = t * CREATURE_SPEED;
         ctx.drawImage(bgc, 0, 0);
 
         // sun bands drifting over the lagoon
@@ -728,26 +762,26 @@
         cells(reef, 0.62, t, true);
         cells(coral, .28, t, true);
 
-        const deep = sample((g) => { const [x, y, a] = pose(P.whale, t); put(g, null, t, x, y, a, 1, (g) => whale(g, t)); });
-        cells(deep, 0.4, t, true);
+        const deep = sample((g) => { const [x, y, a] = pose(P.whale, creatureTime); put(g, null, creatureTime, x, y, a, 1, (g) => whale(g, creatureTime)); });
+        cells(deep, 0.4, creatureTime, true);
 
         const main = sample((g) => {
           seaweed(g, t);
-          let [x, y, a] = pose(P.manta, t); put(g, null, t, x, y, a, 1.2, (g) => manta(g, t));
-          for (const [dx, ph] of [[0, 0], [1, 1.3]]) { [x, y, a] = pose(P.dolphin, t - dx * 0.18); put(g, null, t, x + dx * 120 * Math.sin(a), y - dx * 120 * Math.cos(a), a, 1.25, (g) => dolphin(g, t, ph)); }
-          [x, y, a] = pose(P.turtleA, t); put(g, null, t, x, y, a, 1.55, (g) => turtle(g, t, 1, 0));
-          [x, y, a] = pose(P.turtleB, t); put(g, null, t, x, y, a, 1.3, (g) => turtle(g, t, 1, 2));
-          [x, y, a] = pose(P.turtleC, t); put(g, null, t, x, y, a, 1.1, (g) => turtle(g, t, 1, 4));
-          [x, y, a] = pose(P.school, t);
-          FISH.forEach(([fx, fy], k) => { const ca = Math.cos(a), sa = Math.sin(a), wob = 14 * Math.sin(w * 7 * t + k); put(g, null, t, x + fx * ca - (fy + wob) * sa, y + fx * sa + (fy + wob) * ca, a + 0.15 * Math.sin(w * 9 * t + k), 1.35, (g) => tang(g, t, k)); });
+          let [x, y, a] = pose(P.manta, creatureTime); put(g, null, creatureTime, x, y, a, 1.2, (g) => manta(g, creatureTime));
+          for (const [dx, ph] of [[0, 0], [1, 1.3]]) { [x, y, a] = pose(P.dolphin, creatureTime - dx * 0.18); put(g, null, creatureTime, x + dx * 120 * Math.sin(a), y - dx * 120 * Math.cos(a), a, 1.25, (g) => dolphin(g, creatureTime, ph)); }
+          [x, y, a] = pose(P.turtleA, creatureTime); put(g, null, creatureTime, x, y, a, 1.55, (g) => turtle(g, creatureTime, 1, 0));
+          [x, y, a] = pose(P.turtleB, creatureTime); put(g, null, creatureTime, x, y, a, 1.3, (g) => turtle(g, creatureTime, 1, 2));
+          [x, y, a] = pose(P.turtleC, creatureTime); put(g, null, creatureTime, x, y, a, 1.1, (g) => turtle(g, creatureTime, 1, 4));
+          [x, y, a] = pose(P.school, creatureTime);
+          FISH.forEach(([fx, fy], k) => { const ca = Math.cos(a), sa = Math.sin(a), wob = 14 * Math.sin(w * 7 * creatureTime + k); put(g, null, creatureTime, x + fx * ca - (fy + wob) * sa, y + fx * sa + (fy + wob) * ca, a + 0.15 * Math.sin(w * 9 * creatureTime + k), 1.35, (g) => tang(g, creatureTime, k)); });
           // Loose spacing and slightly different phases avoid a mechanical school.
           for(const [delay,side,size] of [[0,0,1.18],[.65,70,1],[1.25,-55,.86]]) {
-            const q=t-delay,[fx,fy,heading]=pose(P.clownfish,q);
-            put(g,null,t,fx-Math.sin(heading)*side,fy+Math.cos(heading)*side,heading,size,gg=>clownfish(gg,t,delay));
+            const q=creatureTime-delay,[fx,fy,heading]=pose(P.clownfish,q);
+            put(g,null,creatureTime,fx-Math.sin(heading)*side,fy+Math.cos(heading)*side,heading,size,gg=>clownfish(gg,creatureTime,delay));
           }
           for(const [delay,side,size] of [[0,0,1.15],[.55,72,1],[1.2,-65,.91]]) {
-            const q=t-delay,[fx,fy,heading]=pose(P.discus,q);
-            put(g,null,t,fx-Math.sin(heading)*side,fy+Math.cos(heading)*side,heading,size,gg=>blueDiscus(gg,t,delay));
+            const q=creatureTime-delay,[fx,fy,heading]=pose(P.discus,q);
+            put(g,null,creatureTime,fx-Math.sin(heading)*side,fy+Math.cos(heading)*side,heading,size,gg=>blueDiscus(gg,creatureTime,delay));
           }
           for (const [kind, p0, y0, s, dir] of FLOWERS) {
             const u = (p0 + t / T) % 1, fx = -220 + u * (W + 440), fy = OFFSET_Y + y0 + u * 420 + 30 * Math.sin(w * 3 * t + p0 * 9);
@@ -762,7 +796,7 @@
         // foam wakes behind the swimmers
         for (const [fn, len] of [[P.turtleA, 1.5], [P.turtleB, 1.3], [P.turtleC, 1.1], [P.manta, 1.6], [P.dolphin, 1.4]]) {
           for (let k = 1; k <= 16; k++) {
-            const [x, y, a] = pose(fn, t - k * 0.09 - 0.35 * len), side = (hash(k, len, 3) - 0.5) * k * 9;
+            const [x, y, a] = pose(fn, creatureTime - k * 0.09 - 0.35 * len), side = (hash(k, len, 3) - 0.5) * k * 9;
             const px = x + side * -Math.sin(a), py = y + side * Math.cos(a);
             ctx.fillStyle = `rgba(255,255,255,${0.55 * (1 - k / 17)})`;
             ctx.fillText(".·o°"[(hash(k, len, Math.floor(t * 5)) * 4) | 0], Math.floor(px / CW) * CW + CW / 2, Math.floor(py / CH) * CH + CH / 2);
