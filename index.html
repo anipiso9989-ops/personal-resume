@@ -51,7 +51,7 @@
     .header-actions a { font-size: 13px; text-decoration: none; padding: 8px 13px; border-radius: 30px; background: rgba(248, 251, 246, .94); border: 1px solid rgba(255,255,255,.85); }
     .motion-button { display: inline-flex; align-items: center; gap: 8px; background: rgba(248, 251, 246, .94); border: 1px solid rgba(255,255,255,.8); border-radius: 30px; padding: 8px 13px; font-size: 12px; }
     .motion-icon { font-size: 12px; width: 12px; }
-    .resume { width: min(1060px, calc(100% - 60px)); margin: 60px auto 30px; background: var(--paper); -webkit-backdrop-filter: blur(3px); backdrop-filter: blur(3px); border: 1px solid rgba(255,255,255,.9); border-radius: 5px; box-shadow: 0 25px 85px rgba(5, 70, 76, .14); }
+    .resume { width: min(1060px, calc(100% - 60px)); margin: 60px auto 30px; background: var(--paper); border: 1px solid rgba(255,255,255,.9); border-radius: 5px; box-shadow: 0 25px 85px rgba(5, 70, 76, .14); }
     .hero { padding: 66px 66px 48px; }
     .eyebrow, .section-label, .meta-label { font: 11px/1.5 var(--mono); letter-spacing: .12em; text-transform: uppercase; }
     .eyebrow { margin: 0 0 27px; display: flex; align-items: center; gap: 10px; color: var(--accent); }
@@ -438,7 +438,7 @@ const rand=n=>{const v=Math.sin(n*127.1+42)*43758.5453;return v-Math.floor(v);};
 const animals=Array.from({length:52},(_,i)=>({kind:i===0?'whale':['turtle','manta','dolphin','tang','tang','angel','shark','jelly'][i%8],x:rand(i+1),y:rand(i+100),speed:.002+rand(i+200)*.004,phase:rand(i+300)*TAU,size:.7+rand(i+400)*.6}));
 const plants=Array.from({length:24},(_,i)=>({x:rand(i+500),y:.12+rand(i+600)*.88,size:.6+rand(i+700)*.8}));
 const ripples=[];const reduced=matchMedia('(prefers-reduced-motion: reduce)');
-let time=0,last=0,frameId=null,printing=false;
+let time=0,last=0,lastRender=0,frameId=null,printing=false;
 function render(t){
  const scale=Math.min(width/1400,height/850); // Wide camera: complete ecosystem at every aspect ratio.
  const water=ctx.createLinearGradient(0,0,width,height);water.addColorStop(0,'#a7e6da');water.addColorStop(.48,'#59c9ca');water.addColorStop(1,'#2596b1');ctx.fillStyle=water;ctx.fillRect(0,0,width,height);
@@ -455,7 +455,7 @@ function render(t){
  const now=performance.now();ctx.font='11px "IBM Plex Mono", monospace';
  for(let i=ripples.length-1;i>=0;i--){const r=ripples[i],age=(now-r.start)/1000;if(age>2.5){ripples.splice(i,1);continue;}for(let ring=0;ring<3;ring++){const radius=reduced.matches?22+ring*12:age*95-ring*21;if(radius<3)continue;const count=Math.max(12,Math.ceil(radius*TAU/10));ctx.fillStyle=`rgba(245,255,250,${(1-age/2.5)*(.85-ring*.16)})`;for(let j=0;j<count;j++){const a=j/count*TAU;ctx.fillText(j%3?'·':'~',r.x+Math.cos(a)*radius,r.y+Math.sin(a)*radius*.68);}}}
 }
-function loop(now){frameId=null;if(document.hidden||printing)return;if(!reduced.matches&&last)time+=(now-last)/1000;last=now;render(time);if(!reduced.matches||ripples.length)frameId=requestAnimationFrame(loop);}
+function loop(now){frameId=null;if(document.hidden||printing)return;if(!reduced.matches&&last)time+=(now-last)/1000;last=now;if(now-lastRender>=1000/24){render(time);lastRender=now;}if(!reduced.matches||ripples.length)frameId=requestAnimationFrame(loop);}
 function start(){if(frameId!==null)cancelAnimationFrame(frameId);frameId=null;last=0;if(!document.hidden&&!printing)frameId=requestAnimationFrame(loop);}
 // A tap triggers feedback without preventing links, scrolling, selection or printing.
 let pointerStart=null;
