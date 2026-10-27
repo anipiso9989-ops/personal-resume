@@ -157,9 +157,9 @@
   </style>
 </head>
 <body id="top">
-  <canvas id="surface-ripples" width="2528" height="2288" aria-hidden="true" style="position:fixed;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none;z-index:2"></canvas>
+  <canvas id="surface-ripples" width="2906" height="2631" aria-hidden="true" style="position:fixed;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none;z-index:2"></canvas>
   <a class="skip" href="#resume">Skip to résumé</a>
-  <div id="lagoon" aria-hidden="true"><canvas id="sea" width="2528" height="2288"></canvas></div>
+  <div id="lagoon" aria-hidden="true"><canvas id="sea" width="2906" height="2631"></canvas></div>
 
   <!-- ==================== START EDITING ====================
     Everything between here and END EDITING is your resume.
@@ -315,7 +315,7 @@
 
       // Top-down Hawaiian lagoon in ASCII cells. Everything is a pure function of t and
       // every motion has an integer number of cycles per T, so the video loops seamlessly.
-      const W = 1944 * 1.3, H = 1760 * 1.3, T = 24.5, TAU = Math.PI * 2, w = TAU / T;
+      const W = Math.round(1944 * 1.3 * 1.15), H = Math.round(1760 * 1.3 * 1.15), T = 24.5, TAU = Math.PI * 2, w = TAU / T;
       const CW = 16, CH = 22, COLS = Math.ceil(W / CW), ROWS = Math.ceil(H / CH), SS = 3;
       const cv = document.getElementById("sea"), ctx = cv.getContext("2d");
 
@@ -328,20 +328,40 @@
       const rgb = (c, a = 1) => `rgba(${c[0] | 0},${c[1] | 0},${c[2] | 0},${a})`;
       const lum = (c) => (0.299 * c[0] + 0.587 * c[1] + 0.114 * c[2]) / 255;
 
-      // Lagoon: sunlit shallows top-left, deeper blue bottom-right.
-      const STOPS = [[0, [178, 244, 232]], [0.42, [74, 214, 214]], [0.78, [26, 168, 202]], [1, [14, 128, 182]]];
+      // Shallow-water bathymetry: broad sand shelves and softly deepening
+      // turquoise basins. This static color field also tints submerged animals.
+      const STOPS = [[0, [178, 244, 232]], [.42, [74, 214, 214]], [.78, [38, 176, 199]], [1, [30, 149, 177]]];
+      const basin = (x,y,cx,cy,rx,ry) => Math.exp(-1.7 * (((x-cx)/rx)**2 + ((y-cy)/ry)**2));
       const water = (x, y) => {
-        const k = Math.min(1, Math.max(0, (x * 0.45 + y * 0.9) / (W * 0.45 + H * 0.9)));
-        for (let i = 1; i < STOPS.length; i++) if (k <= STOPS[i][0]) return mix(STOPS[i - 1][1], STOPS[i][1], (k - STOPS[i - 1][0]) / (STOPS[i][0] - STOPS[i - 1][0]));
-        return STOPS[3][1];
+        const nx=x/W, ny=y/H;
+        const k=Math.min(1,Math.max(0,(nx*.45+ny*.9)/1.35));
+        let color=STOPS[STOPS.length-1][1];
+        for(let i=1;i<STOPS.length;i++) if(k<=STOPS[i][0]) {
+          color=mix(STOPS[i-1][1],STOPS[i][1],(k-STOPS[i-1][0])/(STOPS[i][0]-STOPS[i-1][0])); break;
+        }
+        const depth=.27*basin(nx,ny,.72,.65,.31,.35)
+                   +.20*basin(nx,ny,.20,.52,.22,.25)
+                   +.16*basin(nx,ny,.90,.17,.21,.23);
+        color=mix(color,[16,112,142],Math.min(.34,depth));
+        const shelf=.12*basin(nx,ny,.16,.12,.34,.29)
+                   +.09*basin(nx,ny,.48,.35,.23,.19);
+        return mix(color,[183,239,219],shelf);
       };
       {
-        const g = bgx.createLinearGradient(0, 0, W * 0.45, H * 0.9);
-        STOPS.forEach(([k, c]) => g.addColorStop(k, rgb(c)));
-        bgx.fillStyle = g; bgx.fillRect(0, 0, W, H);
-        bgx.fillStyle = "rgba(255,255,255,0.07)";
-        for (let x = 0; x < W; x += CW) bgx.fillRect(x, 0, 1, H);
-        for (let y = 0; y < H; y += CH) bgx.fillRect(0, y, W, 1);
+        // Bake the smooth depth map once at low resolution, then interpolate it.
+        // No depth calculations or extra full-canvas shading are needed per frame.
+        const [map, mx]=mk(Math.ceil(W/8),Math.ceil(H/8));
+        const pixels=mx.createImageData(map.width,map.height);
+        for(let y=0;y<map.height;y++) for(let x=0;x<map.width;x++) {
+          const c=water(x/(map.width-1)*W,y/(map.height-1)*H), i=(y*map.width+x)*4;
+          pixels.data[i]=c[0];pixels.data[i+1]=c[1];pixels.data[i+2]=c[2];pixels.data[i+3]=255;
+        }
+        mx.putImageData(pixels,0,0);
+        bgx.imageSmoothingEnabled=true;
+        bgx.drawImage(map,0,0,W,H);
+        bgx.fillStyle="rgba(255,255,255,0.07)";
+        for(let x=0;x<W;x+=CW) bgx.fillRect(x,0,1,H);
+        for(let y=0;y<H;y+=CH) bgx.fillRect(0,y,W,1);
       }
 
       // ---------- creatures, drawn in local px facing +x ----------
