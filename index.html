@@ -26,7 +26,7 @@
       --ink: #143b3a;
       --muted: #203b36;
       --accent: #21594d;
-      --paper: rgba(248, 251, 246, .64); /* Panel opacity: lower = more translucent. */
+      --paper: rgba(248, 251, 246, .50); /* Panel opacity: lower = more translucent. */
       --line: rgba(32, 76, 66, .17);
       --sans: "IBM Plex Mono", monospace;
       --serif: "IBM Plex Mono", monospace;
@@ -524,7 +524,7 @@
               const x = u * length + along * u * u;
               const y = Math.sin(u * Math.PI) * curl + across * u * u
                       + Math.sin(w * 2 * t + blade * .7 + u * 2) * 6 * u * u;
-              const width = 2 + Math.sin(Math.PI * u) * (13 + hash(blade, px, 9) * 8);
+              const width = 1.5 + Math.sin(Math.PI * u) * (9 + hash(blade, px, 9) * 5);
               points.push([x, y, width]);
             }
             g.beginPath();
