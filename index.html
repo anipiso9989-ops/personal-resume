@@ -136,7 +136,7 @@
     @media print {
       @page { size: auto; margin: 15mm; }
       html, body { background: white; font-size: 10pt; color: #111; }
-      #lagoon, .site-header, .section-nav, .hero-cta, .site-footer, .skip, .print-button, .no-js { display: none !important; }
+      #lagoon, #water-ripples, .site-header, .section-nav, .hero-cta, .site-footer, .skip, .print-button, .no-js { display: none !important; }
       .resume { width: 100%; margin: 0; border: 0; box-shadow: none; background: white; }
       .hero { padding: 0 0 20px; }
       .hero-grid { grid-template-columns: 1.3fr 1fr; gap: 30px; }
@@ -157,6 +157,7 @@
   </style>
 </head>
 <body id="top">
+  <canvas id="water-ripples" aria-hidden="true" style="position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:2"></canvas>
   <a class="skip" href="#resume">Skip to résumé</a>
   <div id="lagoon" aria-hidden="true"><canvas id="sea" width="1944" height="1760"></canvas></div>
 
@@ -313,6 +314,7 @@
   <script id="lagoon-animation">
 
 const cv=document.getElementById('sea'),ctx=cv.getContext('2d');
+const rippleCanvas=document.getElementById('water-ripples'),rippleCtx=rippleCanvas.getContext('2d');
 const TAU=Math.PI*2,T=80;
 const ell=(g,x,y,rx,ry,rot,fill)=>{g.beginPath();g.ellipse(x,y,rx,ry,rot||0,0,TAU);g.fillStyle=fill;g.fill();};
       function turtle(g, t, s, ph) {
@@ -432,7 +434,7 @@ function sprite(kind,frame){
  sprites.set(key,out);return out;
 }
 let width=0,height=0,dpr=1;
-function resize(){width=innerWidth;height=innerHeight;dpr=Math.min(devicePixelRatio||1,2);cv.width=Math.round(width*dpr);cv.height=Math.round(height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);}
+function resize(){width=innerWidth;height=innerHeight;dpr=Math.min(devicePixelRatio||1,2);cv.width=Math.round(width*dpr);cv.height=Math.round(height*dpr);ctx.setTransform(dpr,0,0,dpr,0,0);rippleCanvas.width=cv.width;rippleCanvas.height=cv.height;rippleCtx.setTransform(dpr,0,0,dpr,0,0);}
 addEventListener('resize',()=>{resize();render(time);});resize();
 const rand=n=>{const v=Math.sin(n*127.1+42)*43758.5453;return v-Math.floor(v);};
 const animals=Array.from({length:52},(_,i)=>({kind:i===0?'whale':['turtle','manta','dolphin','tang','tang','angel','shark','jelly'][i%8],x:rand(i+1),y:rand(i+100),speed:.002+rand(i+200)*.004,phase:rand(i+300)*TAU,size:.7+rand(i+400)*.6}));
@@ -452,15 +454,16 @@ function render(t){
  for(const p of plants)for(let f=0;f<9;f++)for(let k=0;k<18;k++){const bend=Math.sin(t*.65+k*.16+f*.5+p.x*12)*k*.7;const x=p.x*width+((f-4)*5+bend)*scale*p.size,y=p.y*height-k*4*scale*p.size;ctx.fillStyle=f%2?'rgba(35,116,87,.48)':'rgba(55,145,98,.5)';ctx.fillText(k%3?'|':'/',x,y);}
  for(const a of animals){const x=((a.x+t*a.speed)%1)*(width+180)-90,y=(a.y+Math.sin(t*.13+a.phase)*.065)*height;const angle=Math.cos(t*.13+a.phase)*.12;const size=scale*a.size;ctx.save();ctx.translate(x,y);ctx.rotate(angle);ctx.globalAlpha=a.kind==='jelly'?.65:.88;ctx.drawImage(sprite(a.kind,Math.floor(t*8)%24),-150*size,-80*size,260*size,160*size);ctx.restore();}
  // Click coordinates are viewport coordinates, matching this fixed canvas exactly.
- const now=performance.now();ctx.font='11px "IBM Plex Mono", monospace';
- for(let i=ripples.length-1;i>=0;i--){const r=ripples[i],age=(now-r.start)/1000;if(age>2.5){ripples.splice(i,1);continue;}for(let ring=0;ring<3;ring++){const radius=reduced.matches?22+ring*12:age*95-ring*21;if(radius<3)continue;const count=Math.max(12,Math.ceil(radius*TAU/10));ctx.fillStyle=`rgba(245,255,250,${(1-age/2.5)*(.85-ring*.16)})`;for(let j=0;j<count;j++){const a=j/count*TAU;ctx.fillText(j%3?'·':'~',r.x+Math.cos(a)*radius,r.y+Math.sin(a)*radius*.68);}}}
+ rippleCtx.clearRect(0,0,width,height);rippleCtx.textAlign="center";rippleCtx.textBaseline="middle";
+ const now=performance.now();rippleCtx.font='11px "IBM Plex Mono", monospace';
+ for(let i=ripples.length-1;i>=0;i--){const r=ripples[i],age=(now-r.start)/1000;if(age>2.5){ripples.splice(i,1);continue;}for(let ring=0;ring<3;ring++){const radius=reduced.matches?22+ring*12:age*95-ring*21;if(radius<3)continue;const count=Math.max(12,Math.ceil(radius*TAU/10));rippleCtx.fillStyle=`rgba(245,255,250,${(1-age/2.5)*(.85-ring*.16)})`;for(let j=0;j<count;j++){const a=j/count*TAU;rippleCtx.fillText(j%3?'·':'~',r.x+Math.cos(a)*radius,r.y+Math.sin(a)*radius*.68);}}}
 }
 function loop(now){frameId=null;if(document.hidden||printing)return;if(!reduced.matches&&last)time+=(now-last)/1000;last=now;if(now-lastRender>=1000/24){render(time);lastRender=now;}if(!reduced.matches||ripples.length)frameId=requestAnimationFrame(loop);}
 function start(){if(frameId!==null)cancelAnimationFrame(frameId);frameId=null;last=0;if(!document.hidden&&!printing)frameId=requestAnimationFrame(loop);}
 // A tap triggers feedback without preventing links, scrolling, selection or printing.
 let pointerStart=null;
 document.addEventListener('pointerdown',e=>{if(e.isPrimary)pointerStart={x:e.clientX,y:e.clientY};},{passive:true});
-document.addEventListener('pointerup',e=>{if(!pointerStart||!e.isPrimary)return;const p=pointerStart;pointerStart=null;if(Math.hypot(e.clientX-p.x,e.clientY-p.y)>12)return;ripples.push({x:e.clientX,y:e.clientY,start:performance.now()});if(ripples.length>10)ripples.shift();start();},{passive:true});
+document.addEventListener('pointerup',e=>{if(!pointerStart||!e.isPrimary)return;const p=pointerStart;pointerStart=null;if(Math.hypot(e.clientX-p.x,e.clientY-p.y)>12)return;rippleCanvas.dataset.taps=String(Number(rippleCanvas.dataset.taps||0)+1);ripples.push({x:e.clientX,y:e.clientY,start:performance.now()});if(ripples.length>10)ripples.shift();start();},{passive:true});
 document.addEventListener('pointercancel',()=>{pointerStart=null;},{passive:true});
 document.addEventListener('visibilitychange',start);reduced.addEventListener('change',start);
 addEventListener('beforeprint',()=>{printing=true;start();});addEventListener('afterprint',()=>{printing=false;start();});
