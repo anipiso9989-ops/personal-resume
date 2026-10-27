@@ -136,7 +136,7 @@
     @media print {
       @page { size: auto; margin: 15mm; }
       html, body { background: white; font-size: 10pt; color: #111; }
-      #lagoon, .site-header, .section-nav, .hero-cta, .site-footer, .skip, .print-button, .no-js { display: none !important; }
+      #lagoon, #surface-ripples, .site-header, .section-nav, .hero-cta, .site-footer, .skip, .print-button, .no-js { display: none !important; }
       .resume { width: 100%; margin: 0; border: 0; box-shadow: none; background: white; }
       .hero { padding: 0 0 20px; }
       .hero-grid { grid-template-columns: 1.3fr 1fr; gap: 30px; }
@@ -157,8 +157,9 @@
   </style>
 </head>
 <body id="top">
+  <canvas id="surface-ripples" width="2528" height="2288" aria-hidden="true" style="position:fixed;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none;z-index:2"></canvas>
   <a class="skip" href="#resume">Skip to résumé</a>
-  <div id="lagoon" aria-hidden="true"><canvas id="sea" width="1944" height="1760"></canvas></div>
+  <div id="lagoon" aria-hidden="true"><canvas id="sea" width="2528" height="2288"></canvas></div>
 
   <!-- ==================== START EDITING ====================
     Everything between here and END EDITING is your resume.
@@ -314,8 +315,8 @@
 
       // Top-down Hawaiian lagoon in ASCII cells. Everything is a pure function of t and
       // every motion has an integer number of cycles per T, so the video loops seamlessly.
-      const W = 1944, H = 1760, T = 24.5, TAU = Math.PI * 2, w = TAU / T;
-      const CW = 16, CH = 22, COLS = Math.ceil(W / CW), ROWS = Math.ceil(H / CH), SS = 4;
+      const W = 1944 * 1.3, H = 1760 * 1.3, T = 24.5, TAU = Math.PI * 2, w = TAU / T;
+      const CW = 16, CH = 22, COLS = Math.ceil(W / CW), ROWS = Math.ceil(H / CH), SS = 3;
       const cv = document.getElementById("sea"), ctx = cv.getContext("2d");
 
       const mk = (cw, ch) => { const c = document.createElement("canvas"); c.width = cw; c.height = ch; return [c, c.getContext("2d", { willReadFrequently: true })]; };
@@ -438,6 +439,11 @@
         school: (t) => [972 + 1150 * Math.sin(2 * w * t + 5), 880 + 800 * Math.sin(3 * w * t + 1)],
         whale: (t) => [972 + 1900 * Math.cos(w * t + 2.4), 1350 + 380 * Math.sin(w * t + 2.4)],
       };
+      const OFFSET_X = (W - 1944) / 2, OFFSET_Y = (H - 1760) / 2;
+      for (const name of Object.keys(P)) {
+        const path = P[name];
+        P[name] = t => { const [x, y] = path(t); return [x + OFFSET_X, y + OFFSET_Y]; };
+      }
       const pose = (fn, t) => { const [x, y] = fn(t), [x2, y2] = fn(t + 0.02); return [x, y, Math.atan2(y2 - y, x2 - x)]; };
       const FISH = [[0, 0], [-120, -70], [-120, 75], [-240, -10], [-230, -140], [-235, 130], [-360, -75], [-355, 70], [-470, 5], [-480, -150], [-470, 150]];
       const FLOWERS = [["h", 0.0, 260, 1.0, 1], ["p", 0.22, 1240, 0.9, -1], ["h", 0.47, 640, 0.8, -1], ["p", 0.63, 1560, 1.1, 1], ["p", 0.86, 120, 0.8, 1]];
@@ -460,6 +466,7 @@
 
       // Reef floor is static: sample it once.
       const reef = sample((g) => {
+        g.translate(OFFSET_X, OFFSET_Y);
         const blob = (x, y, r, c1, c2, n) => { for (let k = 0; k < n; k++) { const a = hash(x, y, k) * TAU, d = hash(y, x, k) * r * 0.7; ell(g, x + Math.cos(a) * d, y + Math.sin(a) * d * 0.9, r * (0.35 + 0.3 * hash(k, x, y)), r * (0.3 + 0.3 * hash(k, y, x)), a, k % 2 ? c1 : c2); } };
         blob(140, 1600, 110, "#d98a6a", "#c46a5a", 10); blob(1800, 220, 100, "#d8b86a", "#c49c4c", 9);
         blob(80, 380, 80, "#c9a0d8", "#e2a0b8", 7); blob(1700, 1650, 110, "#d6b870", "#e8907a", 10);
@@ -495,6 +502,30 @@
         }
       }
 
+      const SEAWEED = [[.04,.25,1], [.12,.83,1.15], [.28,.95,.8], [.74,.93,1], [.94,.72,1.2], [.91,.23,.9], [.7,.12,.7]];
+      function seaweed(g, t) {
+        for (const [px, py, size] of SEAWEED) {
+          g.save(); g.translate(px * W, py * H); g.scale(size, size);
+          for (let blade = 0; blade < 8; blade++) {
+            const length = 125 + hash(blade, px, py) * 120;
+            const root = (blade - 3.5) * 14;
+            const points = [];
+            for (let k = 0; k <= 18; k++) {
+              const u = k / 18;
+              const sway = Math.sin(w * 2 * t + u * 1.7 + px * 9) * 30 * u * u;
+              points.push([root + sway + (blade - 3.5) * u * 10, -u * length]);
+            }
+            g.beginPath();
+            for (let k = 0; k < points.length; k++) { const [x,y] = points[k], width = 9 * (1-k/points.length) + 2; g.lineTo(x-width,y); }
+            for (let k = points.length-1; k >= 0; k--) { const [x,y] = points[k], width = 9 * (1-k/points.length) + 2; g.lineTo(x+width,y); }
+            g.closePath(); g.fillStyle = blade % 2 ? '#367e57' : '#549c65'; g.fill();
+            g.beginPath(); points.forEach(([x,y], k) => k ? g.lineTo(x,y) : g.moveTo(x,y));
+            g.strokeStyle = '#89b87b'; g.lineWidth = 3; g.stroke();
+          }
+          g.restore();
+        }
+      }
+
       function draw(t) {
         t = ((t % T) + T) % T;
         ctx.drawImage(bgc, 0, 0);
@@ -510,15 +541,20 @@
 
         ctx.font = '500 15px "IBM Plex Mono", monospace'; ctx.textAlign = "center"; ctx.textBaseline = "middle";
 
-        // caustic net + surface glints
+        // Refracted light: two gently warped wave families form a quiet net.
+        // Every highlight lands on the same ASCII grid as the existing scenery.
         for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) {
           const x = i * CW, y = j * CH;
-          const v = Math.sin(x * 0.011 + y * 0.004 + w * 2 * t + 1.6 * Math.sin(y * 0.007 - w * 3 * t))
-                  + Math.sin(-x * 0.006 + y * 0.012 - w * 3 * t + 1.6 * Math.sin(x * 0.008 + w * 2 * t))
-                  + Math.sin(x * 0.009 - y * 0.009 + w * 4 * t + 1.2 * Math.sin((x + y) * 0.005 + w * t));
-          if (v > 1.55) { const k = Math.min(1, (v - 1.55) / 1.2); ctx.fillStyle = `rgba(255,255,255,${0.16 + 0.42 * k})`; ctx.fillText(k > 0.6 ? "~" : k > 0.3 ? "-" : "·", x + CW / 2, y + CH / 2); }
-          const gl = hash(i, j, Math.floor(t * 6) % 147);
-          if (gl > 0.9988) { const f = Math.sin(((t * 6) % 1) * Math.PI); ctx.fillStyle = `rgba(255,255,255,${0.95 * f})`; ctx.fillText(gl > 0.9995 ? "*" : "+", x + CW / 2, y + CH / 2); }
+          const a = Math.sin(x * .014 + y * .004 + w*t + 1.25*Math.sin(y*.011-w*t));
+          const b = Math.sin(y * .017 - x * .003 - w*t + 1.1*Math.sin(x*.009+w*t));
+          const ridge = Math.max(0, 1 - Math.min(Math.abs(a), Math.abs(b)) / .18);
+          if (ridge > 0) {
+            ctx.fillStyle = `rgba(247,255,239,${.035 + ridge*.16})`;
+            const ch = Math.abs(a)<.08 && Math.abs(b)<.08 ? '+' : ridge>.7 ? '~' : '.';
+            ctx.fillText(ch, x + CW/2, y + CH/2);
+          }
+          const gl = hash(i, j, Math.floor(t*6) % 147);
+          if (gl > .9994) { ctx.fillStyle = `rgba(255,255,255,${.32*Math.sin((t*6%1)*Math.PI)})`; ctx.fillText('+',x+CW/2,y+CH/2); }
         }
 
         cells(reef, 0.62, t, true);
@@ -527,6 +563,7 @@
         cells(deep, 0.4, t, true);
 
         const main = sample((g) => {
+          seaweed(g, t);
           let [x, y, a] = pose(P.manta, t); put(g, null, t, x, y, a, 1.2, (g) => manta(g, t));
           for (const [dx, ph] of [[0, 0], [1, 1.3]]) { [x, y, a] = pose(P.dolphin, t - dx * 0.18); put(g, null, t, x + dx * 120 * Math.sin(a), y - dx * 120 * Math.cos(a), a, 1.25, (g) => dolphin(g, t, ph)); }
           [x, y, a] = pose(P.turtleA, t); put(g, null, t, x, y, a, 1.55, (g) => turtle(g, t, 1, 0));
@@ -535,7 +572,7 @@
           [x, y, a] = pose(P.school, t);
           FISH.forEach(([fx, fy], k) => { const ca = Math.cos(a), sa = Math.sin(a), wob = 14 * Math.sin(w * 7 * t + k); put(g, null, t, x + fx * ca - (fy + wob) * sa, y + fx * sa + (fy + wob) * ca, a + 0.15 * Math.sin(w * 9 * t + k), 1.35, (g) => tang(g, t, k)); });
           for (const [kind, p0, y0, s, dir] of FLOWERS) {
-            const u = (p0 + t / T) % 1, fx = -220 + u * (W + 440), fy = y0 + u * 420 + 30 * Math.sin(w * 3 * t + p0 * 9);
+            const u = (p0 + t / T) % 1, fx = -220 + u * (W + 440), fy = OFFSET_Y + y0 + u * 420 + 30 * Math.sin(w * 3 * t + p0 * 9);
             put(g, null, t, fx, fy, dir * w * t + p0 * 6, 1, (g) => (kind === "h" ? hibiscus : plumeria)(g, s));
           }
         });
@@ -564,23 +601,63 @@
       let paused = motion.matches, printing = false;
       let phase = 0, lastTick = 0, lastDraw = 0, frameId = null;
 
+      const surface = document.getElementById('surface-ripples'), sx = surface.getContext('2d');
+      const ripples = [];
+      let pointerStart = null;
+      function drawRipples(now) {
+        sx.clearRect(0,0,surface.width,surface.height);
+        sx.font = '500 15px "IBM Plex Mono", monospace'; sx.textAlign = 'center'; sx.textBaseline = 'middle';
+        for (let n = ripples.length - 1; n >= 0; n--) {
+          const r = ripples[n], age = (now-r.born)/1000;
+          if (age > 2.6) { ripples.splice(n,1); continue; }
+          const outer = paused ? 70 : age * 260;
+          for (let ring = 0; ring < 3; ring++) {
+            const radius = outer-ring*45;
+            if (radius < 8) continue;
+            const x0 = Math.max(0,Math.floor((r.x-radius-CH)/CW)), x1 = Math.min(COLS-1,Math.ceil((r.x+radius+CH)/CW));
+            const y0 = Math.max(0,Math.floor((r.y-radius-CH)/CH)), y1 = Math.min(ROWS-1,Math.ceil((r.y+radius+CH)/CH));
+            for (let j = y0; j <= y1; j++) for (let i = x0; i <= x1; i++) {
+              const x = i*CW+CW/2, y = j*CH+CH/2;
+              const edge = 1-Math.abs(Math.hypot(x-r.x,y-r.y)-radius)/13;
+              if (edge <= 0) continue;
+              const opacity = edge * (1-age/2.6) * (.9-ring*.18);
+              sx.fillStyle = `rgba(238,255,251,${opacity})`;
+              sx.fillText(edge>.75?'o':edge>.4?'~':'.',x,y);
+            }
+          }
+        }
+      }
+      document.addEventListener('pointerdown', e => { if(e.isPrimary) pointerStart = {x:e.clientX,y:e.clientY,id:e.pointerId}; }, {passive:true});
+      document.addEventListener('pointercancel', () => { pointerStart=null; }, {passive:true});
+      document.addEventListener('pointerup', e => {
+        const p=pointerStart; pointerStart=null;
+        if(!p || p.id!==e.pointerId || Math.hypot(e.clientX-p.x,e.clientY-p.y)>12) return;
+        const bounds=cv.getBoundingClientRect(), scale=Math.max(bounds.width/W,bounds.height/H);
+        const x=(e.clientX-bounds.left+(W*scale-bounds.width)/2)/scale;
+        const y=(e.clientY-bounds.top+(H*scale-bounds.height)/2)/scale;
+        ripples.push({x,y,born:performance.now()}); if(ripples.length>10) ripples.shift();
+        surface.dataset.taps=String(Number(surface.dataset.taps||0)+1);
+        syncPlayback();
+      }, {passive:true});
+
       function loop(now) {
         frameId = null;
-        if (paused || printing || document.hidden) return;
-        if (lastTick) phase += Math.min(now - lastTick, 250) / 1000;
+        if ((paused && !ripples.length) || printing || document.hidden) return;
+        if (!paused && lastTick) phase += Math.min(now - lastTick, 250) / 1000;
         lastTick = now;
-        if (now - lastDraw >= 1000 / 30) { draw(phase); lastDraw = now; }
+        if (now - lastDraw >= 1000 / 30) { if (!paused) draw(phase); drawRipples(now); lastDraw = now; }
         frameId = requestAnimationFrame(loop);
       }
       function syncPlayback() {
         if (frameId !== null) cancelAnimationFrame(frameId);
         frameId = null; lastTick = 0;
-        if (!paused && !printing && !document.hidden) frameId = requestAnimationFrame(loop);
+        if ((!paused || ripples.length) && !printing && !document.hidden) frameId = requestAnimationFrame(loop);
       }
       motion.addEventListener('change', (event) => { paused = event.matches; syncPlayback(); });
       document.addEventListener('visibilitychange', syncPlayback);
       window.addEventListener('beforeprint', () => { printing = true; syncPlayback(); });
       window.addEventListener('afterprint', () => { printing = false; syncPlayback(); });
+      document.fonts.ready.then(() => { draw(phase); });
       draw(phase);
       syncPlayback();
 
