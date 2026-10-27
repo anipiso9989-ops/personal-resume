@@ -157,9 +157,9 @@
   </style>
 </head>
 <body id="top">
-  <canvas id="surface-ripples" width="2906" height="2631" aria-hidden="true" style="position:fixed;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none;z-index:2"></canvas>
+  <canvas id="surface-ripples" width="3197" height="2894" aria-hidden="true" style="position:fixed;inset:0;width:100%;height:100%;object-fit:cover;pointer-events:none;z-index:2"></canvas>
   <a class="skip" href="#resume">Skip to résumé</a>
-  <div id="lagoon" aria-hidden="true"><canvas id="sea" width="2906" height="2631"></canvas></div>
+  <div id="lagoon" aria-hidden="true"><canvas id="sea" width="3197" height="2894"></canvas></div>
 
   <!-- ==================== START EDITING ====================
     Everything between here and END EDITING is your resume.
@@ -315,7 +315,7 @@
 
       // Top-down Hawaiian lagoon in ASCII cells. Everything is a pure function of t and
       // every motion has an integer number of cycles per T, so the video loops seamlessly.
-      const W = Math.round(1944 * 1.3 * 1.15), H = Math.round(1760 * 1.3 * 1.15), T = 24.5, TAU = Math.PI * 2, w = TAU / T;
+      const W = Math.round(1944 * 1.3 * 1.15 * 1.1), H = Math.round(1760 * 1.3 * 1.15 * 1.1), T = 24.5, TAU = Math.PI * 2, w = TAU / T;
       const CW = 16, CH = 22, COLS = Math.ceil(W / CW), ROWS = Math.ceil(H / CH), SS = 3;
       const cv = document.getElementById("sea"), ctx = cv.getContext("2d");
 
@@ -422,6 +422,55 @@
         ell(g, 8, 0, 46, 15, 0, "#ffd61f"); ell(g, 40, 0, 12, 9, 0, "#ffe46a");
       }
 
+      // All fish face +x. From above, fins and eyes appear on both sides;
+      // neither species uses the broad circular silhouette of a side profile.
+      function clownfish(g, t, ph) {
+        const fin = Math.sin(w * 30 * t + ph);
+        g.save(); g.translate(-54,0); g.rotate(fin*.22);
+        g.beginPath(); g.moveTo(6,0); g.lineTo(-35,-22); g.quadraticCurveTo(-44,0,-35,22); g.closePath();
+        g.fillStyle='#51423b'; g.fill();
+        g.beginPath(); g.moveTo(0,0); g.lineTo(-32,-16); g.quadraticCurveTo(-38,0,-32,16); g.closePath();
+        g.fillStyle='#e8a34f'; g.fill(); g.restore();
+        for(const m of [-1,1]) {
+          ell(g,16,24*m,22,7,(-.5+fin*.12)*m,'#b77b45');
+          ell(g,16,24*m,16,4,(-.5+fin*.12)*m,'#e8b46c');
+        }
+        ell(g,0,0,62,24,0,'#57453b');
+        g.save(); g.beginPath(); g.ellipse(0,0,59,21,0,0,TAU); g.clip();
+        const c=g.createLinearGradient(0,-23,0,23);
+        c.addColorStop(0,'#d68339'); c.addColorStop(.5,'#f3b15b'); c.addColorStop(1,'#d58a42');
+        g.fillStyle=c; g.fillRect(-65,-26,130,52);
+        for(const x of [-38,-2,34]) {
+          g.save(); g.translate(x,0); g.rotate(.08);
+          g.fillStyle='#655847'; g.fillRect(-9,-28,18,56);
+          g.fillStyle='#f5eedb'; g.fillRect(-5,-28,10,56); g.restore();
+        }
+        g.restore();
+        ell(g,43,-12,4,3,0,'#2f3b37'); ell(g,43,12,4,3,0,'#2f3b37');
+      }
+      function blueDiscus(g, t, ph) {
+        const fin=Math.sin(w*24*t+ph);
+        g.save(); g.translate(-50,0); g.rotate(fin*.24);
+        g.beginPath(); g.moveTo(3,0); g.lineTo(-32,-17); g.quadraticCurveTo(-37,0,-32,17); g.closePath();
+        g.fillStyle='#6dbbbf'; g.fill();
+        g.strokeStyle='#387f9d'; g.lineWidth=4; g.stroke(); g.restore();
+        for(const m of [-1,1]) ell(g,22,23*m,24,6,(-.6+fin*.17)*m,'#7bc5c2');
+        ell(g,0,0,58,22,0,'#347b9c');
+        g.save(); g.beginPath(); g.ellipse(0,0,54,19,0,0,TAU); g.clip();
+        const c=g.createLinearGradient(0,-20,0,20);
+        c.addColorStop(0,'#327aa7');c.addColorStop(.5,'#73c9ce');c.addColorStop(1,'#397eab');
+        g.fillStyle=c;g.fillRect(-60,-25,120,50);
+        g.strokeStyle='#a0e1d4';g.lineWidth=4;
+        for(let stripe=-2;stripe<=2;stripe++) {
+          g.beginPath();
+          for(let k=0;k<=14;k++) {const x=-52+k*7.5,y=stripe*7+Math.sin(k*.7+stripe)*3;k?g.lineTo(x,y):g.moveTo(x,y);}
+          g.stroke();
+        }
+        g.restore();
+        ell(g,0,0,39,3,0,'#397fa2');
+        for(const m of [-1,1]) {ell(g,39,12*m,5,4,0,'#c99b76');ell(g,40,12*m,3,3,0,'#203b4a');}
+      }
+
       function whale(g, t) {
         const b = 0.16 * Math.sin(TAU * 8 * t / T);
         g.save(); g.translate(-260, 0); g.rotate(b);
@@ -464,6 +513,9 @@
         const path = P[name];
         P[name] = t => { const [x, y] = path(t); return [x + OFFSET_X, y + OFFSET_Y]; };
       }
+      // Small resident groups circulate near the new coral shelves.
+      P.clownfish = t => [.14*W + 235*Math.cos(w*t+.5), .32*H + 145*Math.sin(w*t+.5) + 25*Math.sin(2*w*t)];
+      P.discus = t => [.79*W + 390*Math.cos(-w*t+2), .66*H + 365*Math.sin(-w*t+2) + 45*Math.sin(2*w*t)];
       const pose = (fn, t) => { const [x, y] = fn(t), [x2, y2] = fn(t + 0.02); return [x, y, Math.atan2(y2 - y, x2 - x)]; };
       const FISH = [[0, 0], [-120, -70], [-120, 75], [-240, -10], [-230, -140], [-235, 130], [-360, -75], [-355, 70], [-470, 5], [-480, -150], [-470, 150]];
       const FLOWERS = [["h", 0.0, 260, 1.0, 1], ["p", 0.22, 1240, 0.9, -1], ["h", 0.47, 640, 0.8, -1], ["p", 0.63, 1560, 1.1, 1], ["p", 0.86, 120, 0.8, 1]];
@@ -496,6 +548,82 @@
           ell(g, 0, 0, r * 0.3, r * 0.3, 0, c); g.restore();
         }
         for (const [x, y] of [[560, 1580], [1740, 1480], [1960, 980], [40, 900]]) { g.save(); g.translate(x, y); for (let k = 0; k < 12; k++) { g.rotate(TAU / 12); ell(g, 22, 0, 22, 3, 0, "#3a1f4a"); } ell(g, 0, 0, 14, 14, 0, "#2a1438"); g.restore(); }
+      });
+
+      // Just two local sand shelves; the remaining floor keeps its water depth.
+      const SAND_PATCHES = [[.13,.30,1,.28],[.87,.73,.96,-.42]];
+      function sandOutline(g) {
+        g.beginPath();g.moveTo(-335,-20);
+        g.bezierCurveTo(-365,-138,-230,-224,-98,-188);
+        g.bezierCurveTo(12,-242,86,-158,171,-154);
+        g.bezierCurveTo(301,-165,370,-36,302,45);
+        g.bezierCurveTo(328,142,183,204,83,173);
+        g.bezierCurveTo(-28,223,-102,144,-196,156);
+        g.bezierCurveTo(-302,158,-379,77,-335,-20);g.closePath();
+      }
+      const sand = sample(g => {
+        for(const [px,py,size,rotation] of SAND_PATCHES) {
+          g.save();g.translate(px*W,py*H);g.rotate(rotation);g.scale(size,size);
+          sandOutline(g);
+          const c=g.createRadialGradient(-50,-30,20,0,0,375);
+          c.addColorStop(0,'#e5ddbc');c.addColorStop(.6,'#d9d6b5');c.addColorStop(1,'#becdb0');
+          g.fillStyle=c;g.fill();
+          // Small fragments soften the otherwise continuous shoreline.
+          for(let k=0;k<30;k++) {
+            const a=hash(k,px,17)*TAU,r=1+hash(k,py,18)*.12;
+            ell(g,Math.cos(a)*300*r,Math.sin(a)*170*r,9+hash(k,px,19)*13,6+hash(k,py,20)*9,a,'#d5d6b7');
+          }
+          g.restore();
+        }
+      });
+      const sandGrains = [];
+      for(const [px,py,size,rotation] of SAND_PATCHES) for(let k=0;k<125;k++) {
+        const a=hash(k,px,21)*TAU,r=Math.sqrt(hash(k,py,22));
+        const x=Math.cos(a)*r*255*size,y=Math.sin(a)*r*130*size;
+        sandGrains.push([px*W+x*Math.cos(rotation)-y*Math.sin(rotation),py*H+x*Math.sin(rotation)+y*Math.cos(rotation)]);
+      }
+      const CORAL_PALETTE = [
+        ['#b8a5cf','#ddd0e8'], ['#dca9ba','#efcdda'],
+        ['#ded098','#efe3b8'], ['#dfb190','#f0cbb0']
+      ];
+      const CORAL_PATCHES = [
+        [.065,.27,.9,0,0], [.16,.33,1.05,1,1], [.205,.24,.8,3,0], [.09,.395,.65,2,1],
+        [.91,.70,.85,0,1], [.80,.76,1.05,1,0], [.91,.825,.75,3,1], [.775,.675,.8,2,0]
+      ];
+      const coral = sample(g => {
+        for(const [px,py,size,palette,kind] of CORAL_PATCHES) {
+          const [base,light]=CORAL_PALETTE[palette];
+          g.save();g.translate(px*W,py*H);g.scale(size,size);g.rotate(hash(px,py,23)*TAU);
+          if(kind===0) {
+            // Branching coral seen from directly above: bent fingers spread in
+            // irregular directions, each with short forks rather than upright trunks.
+            for(let branch=0;branch<10;branch++) {
+              const a=branch*2.399+hash(branch,px,24)*.7;
+              const length=42+hash(branch,py,25)*73;
+              const rootX=(hash(branch,px,26)-.5)*35,rootY=(hash(branch,py,27)-.5)*30;
+              const midX=rootX+Math.cos(a)*length*.52,midY=rootY+Math.sin(a)*length*.52;
+              const endX=rootX+Math.cos(a+.22)*length,endY=rootY+Math.sin(a+.22)*length;
+              const branchPath=()=>{
+                g.beginPath();g.moveTo(rootX,rootY);g.quadraticCurveTo(midX,midY,endX,endY);
+                for(const side of [-1,1]) {g.moveTo(midX,midY);g.quadraticCurveTo(midX+Math.cos(a+side*.7)*22,midY+Math.sin(a+side*.7)*22,midX+Math.cos(a+side*.7)*42,midY+Math.sin(a+side*.7)*42);}
+              };
+              g.lineCap='round';g.lineJoin='round';branchPath();g.strokeStyle=base;g.lineWidth=20;g.stroke();
+              branchPath();g.strokeStyle=light;g.lineWidth=7;g.stroke();
+            }
+          } else {
+            // Low, overlapping coral heads with softly winding surface ridges.
+            for(let lobe=0;lobe<11;lobe++) {
+              const a=lobe*2.399,r=Math.sqrt(hash(lobe,px,28))*64;
+              const x=Math.cos(a)*r,y=Math.sin(a)*r,rx=24+hash(lobe,py,29)*19,ry=20+hash(lobe,px,30)*17;
+              ell(g,x,y,rx,ry,a,base);
+              g.save();g.beginPath();g.ellipse(x,y,rx-3,ry-3,a,0,TAU);g.clip();
+              g.strokeStyle=light;g.lineWidth=5;
+              for(let ridge=-2;ridge<=2;ridge++) {g.beginPath();g.moveTo(x-rx,y+ridge*12);g.bezierCurveTo(x-rx*.3,y+ridge*12-11,x+rx*.3,y+ridge*12+11,x+rx,y+ridge*12);g.stroke();}
+              g.restore();
+            }
+          }
+          g.restore();
+        }
       });
 
       const RAMP = "8%XSSt%t;:";
@@ -594,7 +722,11 @@
           if (gl > .9994) { ctx.fillStyle = `rgba(255,255,255,${.32*Math.sin((t*6%1)*Math.PI)})`; ctx.fillText('+',x+CW/2,y+CH/2); }
         }
 
+        cells(sand, .28, t, false);
+        ctx.fillStyle='rgba(96,130,113,.22)';
+        sandGrains.forEach(([x,y], k) => ctx.fillText(k%5?'.':':',Math.floor(x/CW)*CW+CW/2,Math.floor(y/CH)*CH+CH/2));
         cells(reef, 0.62, t, true);
+        cells(coral, .28, t, true);
 
         const deep = sample((g) => { const [x, y, a] = pose(P.whale, t); put(g, null, t, x, y, a, 1, (g) => whale(g, t)); });
         cells(deep, 0.4, t, true);
@@ -608,6 +740,15 @@
           [x, y, a] = pose(P.turtleC, t); put(g, null, t, x, y, a, 1.1, (g) => turtle(g, t, 1, 4));
           [x, y, a] = pose(P.school, t);
           FISH.forEach(([fx, fy], k) => { const ca = Math.cos(a), sa = Math.sin(a), wob = 14 * Math.sin(w * 7 * t + k); put(g, null, t, x + fx * ca - (fy + wob) * sa, y + fx * sa + (fy + wob) * ca, a + 0.15 * Math.sin(w * 9 * t + k), 1.35, (g) => tang(g, t, k)); });
+          // Loose spacing and slightly different phases avoid a mechanical school.
+          for(const [delay,side,size] of [[0,0,1.18],[.65,70,1],[1.25,-55,.86]]) {
+            const q=t-delay,[fx,fy,heading]=pose(P.clownfish,q);
+            put(g,null,t,fx-Math.sin(heading)*side,fy+Math.cos(heading)*side,heading,size,gg=>clownfish(gg,t,delay));
+          }
+          for(const [delay,side,size] of [[0,0,1.15],[.55,72,1],[1.2,-65,.91]]) {
+            const q=t-delay,[fx,fy,heading]=pose(P.discus,q);
+            put(g,null,t,fx-Math.sin(heading)*side,fy+Math.cos(heading)*side,heading,size,gg=>blueDiscus(gg,t,delay));
+          }
           for (const [kind, p0, y0, s, dir] of FLOWERS) {
             const u = (p0 + t / T) % 1, fx = -220 + u * (W + 440), fy = OFFSET_Y + y0 + u * 420 + 30 * Math.sin(w * 3 * t + p0 * 9);
             put(g, null, t, fx, fy, dir * w * t + p0 * 6, 1, (g) => (kind === "h" ? hibiscus : plumeria)(g, s));
