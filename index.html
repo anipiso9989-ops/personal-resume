@@ -504,24 +504,41 @@
 
       const SEAWEED = [[.04,.25,1], [.12,.83,1.15], [.28,.95,.8], [.74,.93,1], [.94,.72,1.2], [.91,.23,.9], [.7,.12,.7]];
       function seaweed(g, t) {
+        // Overhead view: irregular ribbons radiate across the seabed from a
+        // compact holdfast. A shared current bends their tips, never the roots.
         for (const [px, py, size] of SEAWEED) {
           g.save(); g.translate(px * W, py * H); g.scale(size, size);
-          for (let blade = 0; blade < 8; blade++) {
-            const length = 125 + hash(blade, px, py) * 120;
-            const root = (blade - 3.5) * 14;
+          const rotation = hash(px, py, 13) * TAU;
+          const currentX = Math.sin(w * 2 * t + px * 5) * 22;
+          const currentY = Math.cos(w * 2 * t + py * 4) * 17;
+          for (let blade = 0; blade < 11; blade++) {
+            const angle = rotation + blade * TAU / 11 + (hash(blade, px, 8) - .5) * .45;
+            const length = 80 + hash(blade, px, py) * 100;
+            const curl = (hash(blade, py, 7) - .5) * 48;
+            const along = currentX * Math.cos(angle) + currentY * Math.sin(angle);
+            const across = -currentX * Math.sin(angle) + currentY * Math.cos(angle);
             const points = [];
-            for (let k = 0; k <= 18; k++) {
-              const u = k / 18;
-              const sway = Math.sin(w * 2 * t + u * 1.7 + px * 9) * 30 * u * u;
-              points.push([root + sway + (blade - 3.5) * u * 10, -u * length]);
+            g.save(); g.rotate(angle);
+            for (let k = 0; k <= 20; k++) {
+              const u = k / 20;
+              const x = u * length + along * u * u;
+              const y = Math.sin(u * Math.PI) * curl + across * u * u
+                      + Math.sin(w * 2 * t + blade * .7 + u * 2) * 6 * u * u;
+              const width = 2 + Math.sin(Math.PI * u) * (13 + hash(blade, px, 9) * 8);
+              points.push([x, y, width]);
             }
             g.beginPath();
-            for (let k = 0; k < points.length; k++) { const [x,y] = points[k], width = 9 * (1-k/points.length) + 2; g.lineTo(x-width,y); }
-            for (let k = points.length-1; k >= 0; k--) { const [x,y] = points[k], width = 9 * (1-k/points.length) + 2; g.lineTo(x+width,y); }
-            g.closePath(); g.fillStyle = blade % 2 ? '#367e57' : '#549c65'; g.fill();
+            points.forEach(([x,y,width], k) => k ? g.lineTo(x,y-width) : g.moveTo(x,y-width));
+            for (let k = points.length-1; k >= 0; k--) {
+              const [x,y,width] = points[k]; g.lineTo(x,y+width);
+            }
+            g.closePath(); g.fillStyle = ['#367e57','#549c65','#448b5b'][blade % 3]; g.fill();
             g.beginPath(); points.forEach(([x,y], k) => k ? g.lineTo(x,y) : g.moveTo(x,y));
             g.strokeStyle = '#89b87b'; g.lineWidth = 3; g.stroke();
+            g.restore();
           }
+          ell(g, 0, 0, 21, 18, rotation, '#346949');
+          ell(g, -3, -4, 11, 9, rotation, '#72915b');
           g.restore();
         }
       }
