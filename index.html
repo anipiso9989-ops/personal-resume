@@ -421,6 +421,7 @@
       const [oc, ox] = mk(COLS * SS, ROWS * SS);
       const [bgc, bgx] = mk(W, H);
       const [nightBackground, nightContext] = mk(W, H);
+      let nightWater;
 
       const hash = (a, b, c) => { let h = Math.sin(a * 127.1 + b * 311.7 + c * 74.7) * 43758.5453; return h - Math.floor(h); };
       const mix = (a, b, k) => [a[0] + (b[0] - a[0]) * k, a[1] + (b[1] - a[1]) * k, a[2] + (b[2] - a[2]) * k];
@@ -453,51 +454,67 @@
           const light=basin(nx,ny,.18,.35,.55,.65);
           pixels.data[i]=c[0]+light*3; pixels.data[i+1]=c[1]+light*12; pixels.data[i+2]=c[2]+light*18;
         }
-        mx.putImageData(pixels,0,0); nightContext.drawImage(map,0,0,W,H);
-        nightContext.fillStyle='rgba(138,192,234,.025)';
-        for(let x=0;x<W;x+=CW) nightContext.fillRect(x,0,1,H);
-        for(let y=0;y<H;y+=CH) nightContext.fillRect(0,y,W,1);
+        mx.putImageData(pixels,0,0); nightWater=map;
       }
       const ell = (g, x, y, rx, ry, rot, fill) => { g.beginPath(); g.ellipse(x, y, rx, ry, rot || 0, 0, TAU); g.fillStyle = fill; g.fill(); };
 
-      // A reusable local skin mask keeps colonies on each moving body, including fins
-      // and tails. Source-atop clips every luminous line and dot to that silhouette.
-      const [skin, skinContext] = mk(350, 200);
-      function litCreature(g, drawBody, t, ...args) {
-        if (!night) { drawBody(g,t,...args); return; }
-        const s=skinContext;
-        s.setTransform(.25,0,0,.25,175,100); s.clearRect(-700,-400,1400,800);
-        drawBody(s,t,...args);
-        s.globalCompositeOperation='source-atop';
-        s.fillStyle='rgba(3,13,37,.76)'; s.fillRect(-700,-400,1400,800);
-        const pulse=.72+.22*Math.sin(t*.85+(args[0]||0));
-        s.lineWidth=9; s.lineCap='round';
-        for(let band=-8;band<=8;band++) {
-          s.strokeStyle=`rgba(62,217,239,${pulse*.8})`; s.beginPath();
-          for(let k=0;k<=60;k++) {
-            const x=-660+k*22, y=band*38+17*Math.sin(x*.025+band*.85)+8*Math.sin(x*.051-band);
-            k?s.lineTo(x,y):s.moveTo(x,y);
-          }
-          s.stroke();
+      // Colony geometry is static in body coordinates. Paint it once, then clip the
+      // texture to animated skin; each species only clears/composites its own bounds.
+      const [colonies, colonyContext] = mk(350, 200);
+      {
+        const s=colonyContext; s.setTransform(.25,0,0,.25,175,100);
+        s.lineWidth=9; s.lineCap='round'; s.strokeStyle='rgba(62,217,239,.8)';
+        s.beginPath();
+        for(let band=-8;band<=8;band++) for(let k=0;k<=60;k++) {
+          const x=-660+k*22, y=band*38+17*Math.sin(x*.025+band*.85)+8*Math.sin(x*.051-band);
+          k?s.lineTo(x,y):s.moveTo(x,y);
         }
+        s.stroke();
         for(let k=0;k<380;k++) {
           const x=-670+hash(k,11,3)*1340, y=-380+hash(k,19,7)*760;
-          const brightness=pulse*(.55+.45*Math.sin(t*1.4+hash(k,2,5)*TAU)**2);
+          const brightness=.55+.45*Math.sin(hash(k,2,5)*TAU)**2;
           ell(s,x,y,4+hash(k,4,8)*4,4+hash(k,4,8)*4,0,`rgba(172,255,239,${brightness})`);
         }
-        s.globalCompositeOperation='source-over';
-        g.drawImage(skin,-700,-400,1400,800);
+      }
+      const skinBounds=new Map([
+        [turtle,[-200,-250,400,500]], [manta,[-350,-340,520,680]],
+        [dolphin,[-280,-160,500,320]], [tang,[-92,-40,160,80]],
+        [clownfish,[-108,-52,184,104]], [blueDiscus,[-100,-48,176,96]],
+        [whale,[-652,-340,1004,680]]
+      ]);
+      const skins=new Map(), flowerSprites=new Map();
+      function litCreature(g, drawBody, t, ...args) {
+        if (!night) { drawBody(g,t,...args); return; }
+        const [x,y,width,height]=skinBounds.get(drawBody);
+        const m=g.getTransform(), left=m.e+m.a*(x+width/2)+m.c*(y+height/2), top=m.f+m.b*(x+width/2)+m.d*(y+height/2);
+        const rx=(Math.abs(m.a)*width+Math.abs(m.c)*height)/2, ry=(Math.abs(m.b)*width+Math.abs(m.d)*height)/2;
+        if(left+rx<0 || top+ry<0 || left-rx>g.canvas.width || top-ry>g.canvas.height) return;
+        let buffer=skins.get(drawBody);
+        if(!buffer) { buffer=mk(Math.ceil(width*.25),Math.ceil(height*.25)); skins.set(drawBody,buffer); }
+        const [skin,s]=buffer;
+        s.setTransform(.25,0,0,.25,-x*.25,-y*.25); s.clearRect(x,y,width,height);
+        drawBody(s,t,...args);
+        s.globalCompositeOperation='source-atop';
+        s.fillStyle='rgba(3,13,37,.76)'; s.fillRect(x,y,width,height);
+        s.globalAlpha=.72+.22*Math.sin(t*.85+(args[0]||0));
+        s.drawImage(colonies,(x+700)*.25,(y+400)*.25,width*.25,height*.25,x,y,width,height);
+        s.globalAlpha=1; s.globalCompositeOperation='source-over';
+        g.drawImage(skin,x,y,width,height);
       }
       function moonlitFlower(g, drawFlower, size) {
         if (!night) { drawFlower(g,size); return; }
-        const s=skinContext;
-        s.setTransform(.25,0,0,.25,175,100); s.clearRect(-700,-400,1400,800);
-        drawFlower(s,size); s.globalCompositeOperation='source-atop';
-        s.fillStyle='rgba(21,39,85,.38)'; s.fillRect(-150,-150,300,300);
-        const light=s.createLinearGradient(-90,-90,90,90);
-        light.addColorStop(0,'rgba(206,231,255,.50)'); light.addColorStop(1,'rgba(143,180,229,.08)');
-        s.fillStyle=light; s.fillRect(-150,-150,300,300); s.globalCompositeOperation='source-over';
-        g.drawImage(skin,-700,-400,1400,800);
+        const key=drawFlower.name+':'+size;
+        let sprite=flowerSprites.get(key);
+        if(!sprite) {
+          const [canvas,s]=mk(76,76); s.setTransform(.25,0,0,.25,38,38);
+          drawFlower(s,size); s.globalCompositeOperation='source-atop';
+          s.fillStyle='rgba(21,39,85,.38)'; s.fillRect(-152,-152,304,304);
+          const light=s.createLinearGradient(-90,-90,90,90);
+          light.addColorStop(0,'rgba(206,231,255,.50)'); light.addColorStop(1,'rgba(143,180,229,.08)');
+          s.fillStyle=light; s.fillRect(-152,-152,304,304);
+          sprite=canvas; flowerSprites.set(key,sprite);
+        }
+        g.drawImage(sprite,-152,-152,304,304);
       }
 
       // The camera stays overhead: this is the moon reflected in the water, with
@@ -509,15 +526,21 @@
         const moonX=gutter>100?gutter*.5:bounds.width*.82;
         const radius=gutter>100?Math.min(bounds.height*.075,gutter*.37):Math.min(bounds.width,bounds.height)*.075;
         moon={x:(W-bounds.width/scale)/2+moonX/scale,
-          y:(H-bounds.height/scale)/2+bounds.height*.24/scale,
+          y:(H-bounds.height/scale)/2+bounds.height*.50/scale,
           r:radius/scale, viewHeight:bounds.height/scale};
+        // The diffuse glow is static until resize. Bake it into the existing basin
+        // instead of blending a large gradient or another bitmap on every frame.
+        const g=nightContext, {x,y,r}=moon;
+        g.drawImage(nightWater,0,0,W,H); g.fillStyle='rgba(138,192,234,.025)';
+        for(let x=0;x<W;x+=CW) g.fillRect(x,0,1,H);
+        for(let y=0;y<H;y+=CH) g.fillRect(0,y,W,1);
+        const glow=g.createRadialGradient(x,y,r*.4,x,y,r*4.5);
+        glow.addColorStop(0,'rgba(151,204,248,.22)'); glow.addColorStop(.4,'rgba(104,166,221,.08)'); glow.addColorStop(1,'rgba(92,150,219,0)');
+        g.fillStyle=glow; g.fillRect(x-r*4.5,y-r*4.5,r*9,r*9);
       }
       positionMoon();
       function drawMoonlight(t) {
         const {x:mx,y:my,r,viewHeight}=moon;
-        const glow=ctx.createRadialGradient(mx,my,r*.4,mx,my,r*4.5);
-        glow.addColorStop(0,'rgba(151,204,248,.22)'); glow.addColorStop(.4,'rgba(104,166,221,.08)'); glow.addColorStop(1,'rgba(92,150,219,0)');
-        ctx.fillStyle=glow; ctx.fillRect(mx-r*4.5,my-r*4.5,r*9,r*9);
         for(let j=Math.floor((my-r*1.3)/CH);j<Math.ceil((my+viewHeight*.65)/CH);j++) {
           const y=j*CH+CH/2, dy=(y-my)/r, trail=(y-my-r)/(viewHeight*.62);
           const drift=Math.sin(y*.028-t*1.2)*CW*.8+Math.sin(y*.063+t*.8)*CW*.35;
@@ -602,10 +625,11 @@
       const pose = (fn, t) => { const [x, y] = fn(t), [x2, y2] = fn(t + 0.02); return [x, y, Math.atan2(y2 - y, x2 - x)]; };
       const FISH = [[0, 0], [-120, -70], [-120, 75], [-240, -10], [-230, -140], [-235, 130], [-360, -75], [-355, 70], [-470, 5], [-480, -150], [-470, 150]];
       const FLOWERS = [["h", 0.0, 260, 1.0, 1], ["p", 0.22, 1240, 0.9, -1], ["h", 0.47, 640, 0.8, -1], ["p", 0.63, 1560, 1.1, 1], ["p", 0.86, 120, 0.8, 1]];
-      function sample(draw) {
+      const deepCells=new Float32Array(COLS*ROWS*4), surfaceCells=new Float32Array(COLS*ROWS*4);
+      function sample(draw, out = new Float32Array(COLS * ROWS * 4)) {
         ox.setTransform(1, 0, 0, 1, 0, 0); ox.clearRect(0, 0, oc.width, oc.height); ox.setTransform((COLS * SS) / (COLS * CW), 0, 0, (ROWS * SS) / (ROWS * CH), 0, 0); draw(ox);
-        const d = ox.getImageData(0, 0, oc.width, oc.height).data, out = new Float32Array(COLS * ROWS * 4), rw = oc.width * 4;
-        for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) { let r = 0, gg = 0, b = 0, a = 0; for (let v = 0; v < SS; v++) for (let u = 0, p = (j * SS + v) * rw + i * SS * 4; u < SS; u++, p += 4) { const al = d[p + 3]; r += d[p] * al; gg += d[p + 1] * al; b += d[p + 2] * al; a += al; } const o = (j * COLS + i) * 4; if (a > 0) { out[o] = r / a; out[o + 1] = gg / a; out[o + 2] = b / a; out[o + 3] = a / (255 * SS * SS); } } return out;
+        const d = ox.getImageData(0, 0, oc.width, oc.height).data, rw = oc.width * 4;
+        for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) { let r = 0, gg = 0, b = 0, a = 0; for (let v = 0; v < SS; v++) for (let u = 0, p = (j * SS + v) * rw + i * SS * 4; u < SS; u++, p += 4) { const al = d[p + 3]; r += d[p] * al; gg += d[p + 1] * al; b += d[p + 2] * al; a += al; } const o = (j * COLS + i) * 4; out[o + 3] = 0; if (a > 0) { out[o] = r / a; out[o + 1] = gg / a; out[o + 2] = b / a; out[o + 3] = a / (255 * SS * SS); } } return out;
       }
       const put = (g, fn, t, x, y, a, s, draw) => { g.save(); g.translate(x, y); g.rotate(a); if (s !== 1) g.scale(s, s); draw(g); g.restore(); };
       const reef = sample((g) => {
@@ -653,13 +677,13 @@
         ctx.font = '500 15px "IBM Plex Mono", monospace'; ctx.textAlign = "center"; ctx.textBaseline = "middle";
         for (let j = 0; j < ROWS; j++) for (let i = 0; i < COLS; i++) { const x = i * CW, y = j * CH, a = Math.sin(x * .014 + y * .004 + w*t + 1.25*Math.sin(y*.011-w*t)), b = Math.sin(y * .017 - x * .003 - w*t + 1.1*Math.sin(x*.009+w*t)), ridge = Math.max(0, 1 - Math.min(Math.abs(a), Math.abs(b)) / .18); if (ridge > 0) { ctx.fillStyle = night ? `rgba(113,185,229,${.025 + ridge*.09})` : `rgba(247,255,239,${.035 + ridge*.16})`; ctx.fillText(Math.abs(a)<.08 && Math.abs(b)<.08 ? '+' : ridge>.7 ? '~' : '.', x + CW/2, y + CH/2); } const gl = hash(i, j, Math.floor(t*6) % 147); if (gl > .9994) { ctx.fillStyle = `rgba(255,255,255,${.32*Math.sin((t*6%1)*Math.PI)})`; ctx.fillText('+',x+CW/2,y+CH/2); } }
         cells(sand, .28, t, false); ctx.fillStyle=night?'rgba(112,153,187,.12)':'rgba(96,130,113,.22)'; sandGrains.forEach(([x,y], k) => ctx.fillText(k%5?'.':':',Math.floor(x/CW)*CW+CW/2,Math.floor(y/CH)*CH+CH/2)); cells(reef, 0.62, t, true); cells(coral, .28, t, true);
-        const deep = sample((g) => { const [x, y, a] = pose(P.whale, creatureTime); put(g, null, creatureTime, x, y, a, 1, (g) => litCreature(g, whale, creatureTime)); }); cells(deep, 0.4, creatureTime, true, 'creature');
+        const deep = sample((g) => { const [x, y, a] = pose(P.whale, creatureTime); put(g, null, creatureTime, x, y, a, 1, (g) => litCreature(g, whale, creatureTime)); }, deepCells); cells(deep, 0.4, creatureTime, true, 'creature');
         if (night) drawMoonlight(t);
         const main = sample((g) => { seaweed(g, t); let [x, y, a] = pose(P.manta, creatureTime); put(g, null, creatureTime, x, y, a, 1.2, (g) => litCreature(g, manta, creatureTime)); for (const [dx, ph] of [[0, 0], [1, 1.3]]) { [x, y, a] = pose(P.dolphin, creatureTime - dx * 0.18); put(g, null, creatureTime, x + dx * 120 * Math.sin(a), y - dx * 120 * Math.cos(a), a, 1.25, (g) => litCreature(g, dolphin, creatureTime, ph)); } [x, y, a] = pose(P.turtleA, creatureTime); put(g, null, creatureTime, x, y, a, 1.55, (g) => litCreature(g, turtle, creatureTime, 1, 0)); [x, y, a] = pose(P.turtleB, creatureTime); put(g, null, creatureTime, x, y, a, 1.3, (g) => litCreature(g, turtle, creatureTime, 1, 2)); [x, y, a] = pose(P.turtleC, creatureTime); put(g, null, creatureTime, x, y, a, 1.1, (g) => litCreature(g, turtle, creatureTime, 1, 4)); [x, y, a] = pose(P.school, creatureTime); FISH.forEach(([fx, fy], k) => { const ca = Math.cos(a), sa = Math.sin(a), wob = 14 * Math.sin(w * 7 * creatureTime + k); put(g, null, creatureTime, x + fx * ca - (fy + wob) * sa, y + fx * sa + (fy + wob) * ca, a + 0.15 * Math.sin(w * 9 * creatureTime + k), 1.35, (g) => litCreature(g, tang, creatureTime, k)); });
           for(const [delay,side,size] of [[0,0,1.18],[.65,70,1],[1.25,-55,.86]]) { const q=creatureTime-delay,[fx,fy,heading]=pose(P.clownfish,q); put(g,null,creatureTime,fx-Math.sin(heading)*side,fy+Math.cos(heading)*side,heading,size,gg=>litCreature(gg, clownfish, creatureTime,delay)); }
           for(const [delay,side,size] of [[0,0,1.15],[.55,72,1],[1.2,-65,.91]]) { const q=creatureTime-delay,[fx,fy,heading]=pose(P.discus,q); put(g,null,creatureTime,fx-Math.sin(heading)*side,fy+Math.cos(heading)*side,heading,size,gg=>litCreature(gg, blueDiscus, creatureTime,delay)); }
           for (const [kind, p0, y0, s, dir] of FLOWERS) { const u = (p0 + t / T) % 1, fx = -220 + u * (W + 440), fy = OFFSET_Y + y0 + u * 420 + 30 * Math.sin(w * 3 * t + p0 * 9); put(g, null, t, fx, fy, dir * w * t + p0 * 6, 1, (g) => moonlitFlower(g, kind === "h" ? hibiscus : plumeria, s)); }
-        });
+        }, surfaceCells);
         ctx.fillStyle = "rgba(4,60,84,0.16)"; for (let j = 0; j < ROWS - 2; j++) for (let i = 0; i < COLS - 2; i++) { const a = main[(j * COLS + i) * 4 + 3]; if (a > 0.3) ctx.fillRect((i + 2) * CW, (j + 2) * CH, CW, CH); }
         for (const [fn, len] of [[P.turtleA, 1.5], [P.turtleB, 1.3], [P.turtleC, 1.1], [P.manta, 1.6], [P.dolphin, 1.4]]) for (let k = 1; k <= 16; k++) { const [x, y, a] = pose(fn, creatureTime - k * 0.09 - 0.35 * len), side = (hash(k, len, 3) - 0.5) * k * 9, px = x + side * -Math.sin(a), py = y + side * Math.cos(a); ctx.fillStyle = night ? `rgba(91,235,229,${0.45 * (1 - k / 17)})` : `rgba(255,255,255,${0.55 * (1 - k / 17)})`; ctx.fillText(".·o°"[(hash(k, len, Math.floor(t * 5)) * 4) | 0], Math.floor(px / CW) * CW + CW / 2, Math.floor(py / CH) * CH + CH / 2); }
         cells(main, 0, t, true, 'surface');
